@@ -1,0 +1,98 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: slush_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: slush
+      POSTGRES_PASSWORD: slush
+      POSTGRES_DB: slush
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./infra/postgres/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slush -d slush"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - slush_network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: slush_es
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - slush_network
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.prod
+    container_name: slush_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://slush:slush@postgres:5432/slush
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ES_ALIAS: slush_entities_current
+      ES_INDEX_2026: slush_entities_2026_v1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - slush_network
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.prod
+      args:
+        # API is accessed via nginx on same origin
+        VITE_API_BASE_URL: ""
+    container_name: slush_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - slush_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: slush_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - slush_network
+
+networks:
+  slush_network:
+    driver: bridge
+
+volumes:
+  pg_data:
+  es_data:

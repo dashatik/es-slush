@@ -1,4 +1,3 @@
--- Schema for Slush Discovery Search (v1)
 -- Postgres is system of record; Elasticsearch is a projection.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

@@ -3,6 +3,11 @@ import { config } from '../config.js';
 import { SearchDocument, GroupedSearchResults } from '../types.js';
 import type { estypes } from '@elastic/elasticsearch';
 
+/*Search service - multi-entity discovery search with grouped results
+Supports fuzzy matching, keyword expansion (nordics/europe), stage normalization
+Results grouped by entity_type with relevance scoring within each group
+Filters use OR within same key, AND across different keys*/
+
 type QueryDslQueryContainer = estypes.QueryDslQueryContainer;
 type QueryDslFunctionScoreContainer = estypes.QueryDslFunctionScoreContainer;
 type SearchHit<T> = estypes.SearchHit<T>;
@@ -20,13 +25,9 @@ function toArray(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value : [value];
 }
 
-// Nordics keyword expansion
 const NORDICS_COUNTRIES = ['FI', 'SE', 'NO', 'DK'];
-
-// Known stage values for exact matching
 const KNOWN_STAGES = ['pre-seed', 'preseed', 'seed', 'series-a', 'series-b', 'series-c'];
 
-// Normalize stage term (e.g., preseed -> pre-seed)
 function normalizeStage(term: string): string | null {
   const lower = term.toLowerCase();
   if (lower === 'preseed') return 'pre-seed';
@@ -38,12 +39,10 @@ function expandQuery(q: string): { query: string; expandedCountries: string[] } 
   const lower = q.toLowerCase();
   const expandedCountries: string[] = [];
 
-  // Expand "nordics" to Nordic countries
   if (lower.includes('nordic') || lower.includes('nordics')) {
     expandedCountries.push(...NORDICS_COUNTRIES);
   }
 
-  // Expand "europe" to European countries in our dataset
   if (lower.includes('europe') || lower.includes('european')) {
     expandedCountries.push('FI', 'SE', 'NO', 'DE');
   }
@@ -54,12 +53,10 @@ function expandQuery(q: string): { query: string; expandedCountries: string[] } 
 function buildFilters(params: SearchParams): QueryDslQueryContainer[] {
   const filters: QueryDslQueryContainer[] = [];
 
-  // Type filter
   if (params.type) {
     filters.push({ term: { entity_type: params.type } });
   }
 
-  // Industry filter (OR within)
   const industries = toArray(params.industry);
   if (industries.length > 0) {
     filters.push({
@@ -70,7 +67,6 @@ function buildFilters(params: SearchParams): QueryDslQueryContainer[] {
     });
   }
 
-  // Country filter (OR within)
   const countries = toArray(params.country);
   if (countries.length > 0) {
     filters.push({
@@ -81,7 +77,6 @@ function buildFilters(params: SearchParams): QueryDslQueryContainer[] {
     });
   }
 
-  // Stage filter (OR within)
   const stages = toArray(params.stage);
   if (stages.length > 0) {
     filters.push({
@@ -99,7 +94,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
   const filters = buildFilters(params);
   const q = params.q?.trim();
 
-  // No query text - match all with filters
   if (!q) {
     if (filters.length === 0) {
       return { match_all: {} };
@@ -111,7 +105,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     };
   }
 
-  // Query is too short - return empty results
   if (q.length < 2) {
     return {
       bool: {
@@ -121,14 +114,10 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
   }
 
   const { expandedCountries } = expandQuery(q);
-
-  // Normalize query terms
   const queryTerms = q.toLowerCase().split(/\s+/).filter(Boolean);
   const normalizedTerms = queryTerms.map((t) => t.replace(/-/g, '_'));
 
-  // Build the MATCHING clauses (these affect recall)
   const should: QueryDslQueryContainer[] = [
-    // Multi-match for text fields with best_fields for relevance
     {
       multi_match: {
         query: q,
@@ -159,7 +148,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         operator: 'or',
       },
     },
-    // Exact phrase match on name (highest boost)
     {
       match_phrase: {
         name: {
@@ -168,8 +156,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         },
       },
     },
-    // Best fields match with fuzziness for typo tolerance
-    // AUTO:4,6 means: no fuzz for <4 chars, 1 edit for 4-5 chars, 2 edits for 6+ chars
     {
       multi_match: {
         query: q,
@@ -187,7 +173,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         fuzziness: 'AUTO:4,6',
       },
     },
-    // Match on keyword fields for exact term matching
     ...normalizedTerms.map((term) => ({
       term: {
         industries: {
@@ -204,7 +189,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         },
       },
     })),
-    // Stage matching - only for known stage values with HIGH boost for exact match
     ...queryTerms
       .map((term) => normalizeStage(term))
       .filter((stage): stage is string => stage !== null)
@@ -216,7 +200,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
           },
         },
       })),
-    // Country matching
     ...queryTerms.map((term) => ({
       term: {
         country: {
@@ -225,7 +208,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         },
       },
     })),
-    // Event type matching
     ...queryTerms.map((term) => ({
       term: {
         event_type: {
@@ -236,7 +218,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     })),
   ];
 
-  // Add expanded country matches (for "nordics", "europe")
   if (expandedCountries.length > 0) {
     should.push({
       terms: {
@@ -246,7 +227,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     });
   }
 
-  // Base query - this is what determines RECALL (what matches)
   const baseQuery: QueryDslQueryContainer = {
     bool: {
       should,
@@ -255,10 +235,8 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     },
   };
 
-  // Build function_score functions for RANKING boosts (don't affect recall)
   const functions: QueryDslFunctionScoreContainer[] = [];
 
-  // Boost person type for role-related queries
   if (queryTerms.some((t) => ['founder', 'ceo', 'partner', 'engineer', 'investor'].includes(t))) {
     functions.push({
       filter: { term: { entity_type: 'person' } },
@@ -266,7 +244,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     });
   }
 
-  // Boost investor type for investor-related queries
   if (queryTerms.some((t) => t.includes('investor'))) {
     functions.push({
       filter: { term: { entity_type: 'investor' } },
@@ -274,7 +251,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     });
   }
 
-  // Boost startup type for startup-related queries
   if (queryTerms.some((t) => t.includes('startup'))) {
     functions.push({
       filter: { term: { entity_type: 'startup' } },
@@ -282,7 +258,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     });
   }
 
-  // Boost event type for event-related queries
   if (queryTerms.some((t) => ['workshop', 'talk', 'event'].includes(t))) {
     functions.push({
       filter: { term: { entity_type: 'event' } },
@@ -290,12 +265,10 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     });
   }
 
-  // If no boosting functions, return base query
   if (functions.length === 0) {
     return baseQuery;
   }
 
-  // Wrap in function_score - boosts affect ranking only, not recall
   return {
     function_score: {
       query: baseQuery,
@@ -310,7 +283,6 @@ export async function search(params: SearchParams): Promise<GroupedSearchResults
   const startTime = Date.now();
   const q = params.q?.trim();
 
-  // Short query - return empty results
   if (q && q.length < 2) {
     return {
       startups: [],
@@ -335,7 +307,6 @@ export async function search(params: SearchParams): Promise<GroupedSearchResults
 
   const hits = response.hits.hits as SearchHit<SearchDocument>[];
 
-  // Group results by entity_type
   const grouped: GroupedSearchResults = {
     startups: [],
     investors: [],

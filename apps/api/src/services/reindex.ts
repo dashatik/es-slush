@@ -4,7 +4,11 @@ import { config } from '../config.js';
 import { entityMapping, indexSettings } from '../es-mapping.js';
 import { Entity, SearchDocument } from '../types.js';
 
-// Unique lock ID for reindex operation (arbitrary but consistent)
+/*Reindex service - rebuilds ES projection from Postgres with zero-downtime
+Uses Postgres advisory lock to prevent concurrent runs
+Atomic alias swap ensures search never sees partial data
+Old indices are cleaned up after successful swap*/
+
 const REINDEX_LOCK_ID = 42;
 
 function entityToSearchDocument(entity: Entity): SearchDocument {
@@ -41,7 +45,6 @@ export async function reindex(): Promise<{
   alias: string;
   previousIndex: string | null;
 }> {
-  // Try to acquire advisory lock (non-blocking)
   const lockResult = await pool.query<{ pg_try_advisory_lock: boolean }>(
     'SELECT pg_try_advisory_lock($1)',
     [REINDEX_LOCK_ID]
@@ -54,23 +57,19 @@ export async function reindex(): Promise<{
 
   try {
     const alias = config.esAlias;
-    // Create a unique versioned index name using timestamp
     const newIndexName = `${config.esIndex2026}_${Date.now()}`;
 
-    // 1. Fetch all active entities from Postgres (source of truth)
     const result = await pool.query<Entity>(
       'SELECT * FROM entities WHERE active_2026 = true'
     );
     const entities = result.rows;
 
-    // 2. Create fresh index with mapping and settings (new physical index)
     await esClient.indices.create({
       index: newIndexName,
       mappings: entityMapping,
       settings: indexSettings,
     });
 
-    // 3. Bulk index all documents to the NEW index
     if (entities.length > 0) {
       const operations = entities.flatMap((entity) => {
         const doc = entityToSearchDocument(entity);
@@ -82,16 +81,12 @@ export async function reindex(): Promise<{
 
       const bulkResponse = await esClient.bulk({ operations, refresh: true });
 
-      // Check for bulk indexing errors
       if (bulkResponse.errors) {
-        // Delete the incomplete index
         await esClient.indices.delete({ index: newIndexName });
         throw new Error('Bulk indexing failed - incomplete index deleted');
       }
     }
 
-    // 4. Atomically swap alias: remove from old index(es), add to new index
-    // This ensures search NEVER sees a half-built projection
     let previousIndex: string | null = null;
     const aliasActions: Array<{ remove?: { index: string; alias: string }; add?: { index: string; alias: string } }> = [];
 
@@ -101,29 +96,21 @@ export async function reindex(): Promise<{
         const currentAliases = await esClient.indices.getAlias({ name: alias });
         const oldIndices = Object.keys(currentAliases);
 
-        // Queue removal of alias from all old indices
         for (const oldIndex of oldIndices) {
           aliasActions.push({ remove: { index: oldIndex, alias } });
-          previousIndex = oldIndex; // Track for cleanup
+          previousIndex = oldIndex;
         }
       }
     } catch {
-      // Alias doesn't exist yet - that's fine
     }
 
-    // Add alias to new index
     aliasActions.push({ add: { index: newIndexName, alias } });
-
-    // Execute atomic alias swap (single API call = atomic)
     await esClient.indices.updateAliases({ actions: aliasActions });
 
-    // 5. Delete old index(es) AFTER successful alias swap
-    // At this point, search is already pointing to the new index
     if (previousIndex && previousIndex !== newIndexName) {
       try {
         await esClient.indices.delete({ index: previousIndex });
       } catch {
-        // Non-critical: old index cleanup failed, but search is working
         console.warn(`Failed to delete old index ${previousIndex}, manual cleanup may be needed`);
       }
     }
@@ -135,7 +122,6 @@ export async function reindex(): Promise<{
       previousIndex,
     };
   } finally {
-    // Always release the lock
     await pool.query('SELECT pg_advisory_unlock($1)', [REINDEX_LOCK_ID]);
   }
 }
