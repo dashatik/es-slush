@@ -1,0 +1,131 @@
+.filterPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.filterPanel__loading {
+  padding: 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.filterPanel__toggle {
+  display: none;
+}
+
+.filterPanel__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filterPanel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filterPanel__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.filterPanel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterPanel__chip {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.filterPanel__chip--active {
+  background: rgba(117, 254, 114, 0.15);
+  border-color: rgba(117, 254, 114, 0.3);
+}
+
+.filterPanel__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(117, 254, 114, 0.2);
+  color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .filterPanel {
+    padding: 0;
+    gap: 0;
+  }
+
+  .filterPanel__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .filterPanel__toggleText {
+    display: flex;
+    align-items: center;
+  }
+
+  .filterPanel__toggleIcon {
+    transition: transform 0.2s;
+  }
+
+  .filterPanel--expanded .filterPanel__toggleIcon {
+    transform: rotate(180deg);
+  }
+
+  .filterPanel__content {
+    max-height: 0;
+    overflow: hidden;
+    padding: 0 16px;
+    transition: max-height 0.25s, padding 0.25s;
+  }
+
+  .filterPanel--expanded .filterPanel__content {
+    max-height: 800px;
+    padding: 0 16px 16px;
+  }
+
+  .filterPanel__chip {
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+}

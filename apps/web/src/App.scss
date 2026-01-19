@@ -1,0 +1,112 @@
+.app {
+  min-height: 100vh;
+  background: var(--bg-2);
+}
+
+.appHeader {
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.appTitle {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.appSubtitle {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.appMain {
+  display: flex;
+  gap: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+}
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.resultsMeta {
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.status,
+.error {
+  padding: 16px;
+  font-size: 14px;
+}
+
+.error {
+  color: #311414;
+  background: rgba(55, 23, 23, 0.1);
+  border-radius: var(--radius);
+}
+
+.emptyState {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .appHeader {
+    padding: 20px 16px;
+  }
+
+  .appTitle {
+    font-size: 1.5rem;
+  }
+
+  .appMain {
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 16px 16px;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .results {
+    gap: 16px;
+  }
+
+  .emptyState {
+    padding: 32px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .appHeader {
+    padding: 16px 12px;
+  }
+
+  .appTitle {
+    font-size: 1.25rem;
+  }
+
+  .appMain {
+    padding: 0 12px 12px;
+  }
+}
