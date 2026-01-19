@@ -37,16 +37,6 @@ export function SearchInput({
           placeholder={placeholder}
           aria-label="Search"
         />
-
-        {/* optional decorative “arrow” like your example card */}
-        <span className="SearchInput__cornerIcon" aria-hidden="true">
-            <defs>
-              <linearGradient id="paint0_linear" x1="31.125" y1="24.1861" x2="26.0265" y2="-28.0004">
-                <stop stopColor="#FAFAFA" />
-                <stop offset="1" stopColor="#75FE72" />
-              </linearGradient>
-            </defs>
-        </span>
       </div>
 
       {showHint && <div className="SearchInput__hint">Enter at least 2 characters to search</div>}
