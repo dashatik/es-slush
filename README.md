@@ -1,193 +1,193 @@
-# Slush Discovery Search (PERN + Elasticsearch)
+# Slush Discovery Search
 
-This project is a **universal discovery search** inspired by the Slush platform.
-It demonstrates how **PostgreSQL (system of record)** and **Elasticsearch (read-optimized projection)** can be combined to support high-recall, relevance-driven discovery across mixed entity types.
+A small, production-style **discovery search system** spanning startups, investors, people, and events.
 
-The focus is on **search quality, index design, and clear data flow**, not feature breadth.
+The goal of this project is not feature breadth, but to show **clear judgment around data ownership, search relevance, and operational safety**. PostgreSQL is treated as the system of record; Elasticsearch is a read-optimized projection built explicitly for discovery.
+
+**GCP: Live demo:** [http://146.148.18.228](http://146.148.18.228)
 
 
 ## What this app does
 
 The application provides a single search experience across four entity types:
 
-* **Startups**
-* **Investors**
-* **People**
-* **Events**
+* **Startups** — companies with industry, stage, and geography
+* **Investors** — funds with focus areas and regions
+* **People** — founders, partners, and professionals
+* **Events** — talks, workshops, and sessions
 
-Users can:
+Users can type short, informal queries such as:
 
-* enter short, messy, natural queries (e.g. *“pre-seed AI investors US”*)
-* optionally narrow results using type and facet filters
-* explore results grouped by entity type
+* `pre-seed AI investors US`
+* `climate supply chain startups`
+* `CEO fintech`
+* `machine learnin climate` (typo intentional)
 
-Results are retrieved via a single relevance query and then **grouped by entity type**, with ranking preserved **within each group**, optimized for discovery rather than exact matching.
+Results are **grouped by entity type**, not mixed into a single ranked list.
+Relevance is tuned *within each group*, which reflects how discovery tools are typically used: you decide *what kind of thing* you’re looking for first, then scan the best matches.
 
-Very short queries (<2 characters) are intentionally not tuned for meaningful relevance.
-
-
-## Core design principles
-
-* **Postgres is the system of record**
-  All canonical data lives in PostgreSQL with an explicit schema.
-
-* **Elasticsearch is a projection, not a source of truth**
-  ES stores a read-optimized index built from Postgres for fast, flexible discovery.
-
-* **High recall over perfect precision**
-  It’s better to include plausible matches than miss obvious ones, while keeping strong matches at the top.
-
-* **Explicit scope control**
-  Every supported behavior is documented; anything not supported is stated clearly.
+Very short queries (< 2 characters) intentionally return no results to avoid noisy, misleading output.
 
 
-## Architecture overview
+## Architecture at a glance
 
 ```
-Postgres (canonical data)
+PostgreSQL (system of record)
         ↓
-   /admin/reindex
+   POST /admin/reindex
         ↓
-Elasticsearch (current-year index + alias)
+Elasticsearch (versioned index + alias)
         ↓
-      /search
+     GET /search
         ↓
    React discovery UI
 ```
 
-### Key points
+### Core principles
 
-* Only **active entities for the current year (2026)** are indexed.
-* Elasticsearch indices are **versioned**, with an alias (`slush_entities_current`) enforcing year validity.
-* Reindexing is **batch-based and idempotent**.
-* The API may start before Elasticsearch is fully ready; search requests handle short connection retries.
+* **Postgres is authoritative**
+  All writes and canonical state live in PostgreSQL.
+
+* **Elasticsearch is derived**
+  ES is treated as a disposable, rebuildable projection optimized for search.
+
+* **Reindexing is explicit**
+  Index rebuilds are triggered manually to keep behavior predictable and easy to reason about.
+
+* **Zero-downtime rebuilds**
+  Versioned indices and atomic alias swaps ensure search never sees partial data.
+
+* **Eventual consistency by design**
+  Search reflects the state of Postgres at the time of the most recent successful reindex.
+
+Only entities marked `active_2026 = true` are indexed, enforcing current-year validity at the projection level.
 
 
 ## Tech stack
 
-* **Frontend:** React + TypeScript + Vite
-* **Backend:** Node.js + Express + TypeScript
-* **Database:** PostgreSQL 16
-* **Search:** Elasticsearch 8.x
-* **Infra:** Docker Compose
+| Layer    | Technology                    |
+| -------- | ----------------------------- |
+| Frontend | React 18, TypeScript, Vite    |
+| Backend  | Node.js, Express, TypeScript  |
+| Database | PostgreSQL 16                 |
+| Search   | Elasticsearch 8.x             |
+| Infra    | Docker Compose, Nginx, GCP VM |
 
 
-## Running the project locally
+## Running locally
 
-### Prerequisites
-
-* Docker + Docker Compose
-
-### Start the stack
+**Prerequisites:** Docker + Docker Compose
 
 ```bash
+# Start all services
 docker compose up --build
+
+# Build the search projection (required once)
+curl -X POST http://localhost:3001/admin/reindex
+
+# Open the app
+# UI:  http://localhost:5173
+# API: http://localhost:3001
 ```
 
-This will:
-
-* initialize Postgres with schema + seed data (first run only)
-* start Elasticsearch as a single node
-* start the API and Web apps
-
-### Build the search projection (one-time)
+To reset all data:
 
 ```bash
-curl -X POST http://localhost:3001/admin/reindex
+docker compose down -v
 ```
-
-### Open the app
-
-* Web UI: [http://localhost:5173](http://localhost:5173)
-* API: [http://localhost:3001](http://localhost:3001)
-
-
-## Search behavior & evaluation
-
-Search quality is evaluated using a small, explicit test suite documented in:
-
-📄 **`docs/relevance-notes.md`**
-
-That document defines:
-
-* what counts as a “strong match”
-* how results are evaluated per entity group
-* example queries with expected top results
-
-This makes relevance decisions **auditable and reviewer-friendly**.
 
 
 ## API overview
 
 ### `GET /search`
 
-Searches the Elasticsearch projection.
+Returns results grouped by entity type.
 
-**Key characteristics**
+**Query parameters**
 
-* Results are **grouped by entity type**
-* Repeatable filters use **OR semantics** within a key
-* Different filter keys combine with **AND**
-* Queries shorter than 2 characters return empty results with a UI hint
+| Name       | Type     | Notes                         |
+| ---------- | -------- | ----------------------------- |
+| `q`        | string   | Free-text query (min 2 chars) |
+| `type`     | string   | Entity type filter            |
+| `industry` | string[] | OR within the same key        |
+| `country`  | string[] | OR within the same key        |
+| `stage`    | string[] | OR within the same key        |
+
+Different filter keys combine with **AND** semantics.
+
 
 ### `POST /admin/reindex`
 
-Rebuilds the Elasticsearch projection from Postgres.
+Rebuilds the Elasticsearch projection from PostgreSQL.
 
-* Indexes only `active_2026 = true` entities
-* Rebuilds the yearly index from scratch and swaps the alias
-* Ensures inactive entities are removed
-* Safe to run multiple times
+**What it does:**
 
+1. Acquires a Postgres advisory lock (prevents concurrent runs)
+2. Fetches all `active_2026 = true` entities
+3. Creates a new versioned ES index
+4. Bulk indexes all documents (idempotent by Postgres ID)
+5. Atomically swaps the search alias
+6. Cleans up old indices
+7. Releases the lock
 
-## Trade-offs / Out of scope
+Search traffic continues uninterrupted throughout the process.
 
-To keep the project focused and evaluable, the following are **intentionally out of scope**:
-
-* Free-text negation parsing (e.g. *“investors not startups”*)
-* Numeric extraction from queries (e.g. *“50k–200k”*)
-* Query-dependent facet counts
-* Autocomplete (nice-to-have only)
-* Incremental indexing (reindex is rebuild-based in v1)
-
-These trade-offs are deliberate and documented to avoid implied functionality.
+Reindexing is intentionally manual to keep behavior explicit and failure modes obvious.
 
 
-## Why this approach
+## Search relevance
 
-This project is designed to demonstrate:
+The search system is tuned for **high recall on short, messy discovery queries**.
 
-* sound **schema and index design**
-* thoughtful **search relevance tuning**
-* clear separation between **data ownership** and **search concerns**
-* the ability to scope and ship a **realistic internal tool**
+The primary goal is simple and measurable:
 
-The scope and implementation choices are optimized to make trade-offs and design decisions easy to evaluate within a limited timebox.
+> Strong matches should appear in the **top 3** of the most relevant entity group.
+
+Implemented relevance features include:
+
+* Multi-field matching (name, description, tags, roles)
+* Fuzzy matching for typo tolerance
+* Prefix matching via edge n-grams
+* Lightweight keyword normalization (e.g. “preseed” → “pre-seed”)
+* Entity-type–aware field boosting
+
+All relevance expectations and example queries are documented in
+**`docs/relevance-notes.md`**, which acts as a small, auditable test suite.
+
+
+## Trade-offs and scope decisions
+
+This project intentionally avoids:
+
+| Feature                | Reason                                                  |
+| ---------------------- | ------------------------------------------------------- |
+| Incremental indexing   | Rebuild-based projection keeps logic simple and correct |
+| Query-time joins       | All search data is denormalized                         |
+| Query-dependent facets | Global facets avoid aggregation complexity              |
+| Numeric extraction     | Structured filters are the source of truth              |
+| Free-text negation     | Type and facet filters handle exclusion                 |
+| Authentication         | Not required for demo scope                             |
 
 
 ## Repository structure
 
 ```
 apps/
-  api/        # Express + TypeScript API
-  web/        # React + Vite frontend
+  api/ # Express + TypeScript API
+  web/ # React + Vite frontend
 infra/
-  postgres/
-    init.sql
-    seed.sql
+  nginx/ # Reverse proxy config
+  postgres/ # Schema + seed data
 docs/
   relevance-notes.md
 docker-compose.yml
+docker-compose.prod.yml
 ```
 
 
 ## Notes for reviewers
 
-* Postgres init/seed scripts run only on first volume creation.
-  *To reset data:* `docker compose down -v`
-* Reindexing is intentionally manual to keep behavior explicit.
-* All search expectations are defined in `docs/relevance-notes.md`.
-
-
-**End of README.**
-
+* All search expectations are explicitly defined in `docs/relevance-notes.md`
+* Reindexing is rebuild-based and idempotent by design
+* Trade-offs are documented intentionally rather than implied
+* The code favors readability and correctness over cleverness

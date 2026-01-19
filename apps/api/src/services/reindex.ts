@@ -43,7 +43,7 @@ export async function reindex(): Promise<{
   indexedCount: number;
   indexName: string;
   alias: string;
-  previousIndex: string | null;
+  deletedIndices: string[];
 }> {
   const lockResult = await pool.query<{ pg_try_advisory_lock: boolean }>(
     'SELECT pg_try_advisory_lock($1)',
@@ -82,23 +82,32 @@ export async function reindex(): Promise<{
       const bulkResponse = await esClient.bulk({ operations, refresh: true });
 
       if (bulkResponse.errors) {
+        const failedItems = bulkResponse.items
+          .filter((item) => item.index?.error)
+          .slice(0, 5)
+          .map((item) => ({
+            id: item.index?._id,
+            error: item.index?.error?.reason,
+          }));
+
+        console.error('Bulk indexing failures (first 5):', JSON.stringify(failedItems, null, 2));
+
         await esClient.indices.delete({ index: newIndexName });
-        throw new Error('Bulk indexing failed - incomplete index deleted');
+        throw new Error(`Bulk indexing failed: ${failedItems.length > 0 ? failedItems[0].error : 'unknown error'}`);
       }
     }
 
-    let previousIndex: string | null = null;
+    const oldIndices: string[] = [];
     const aliasActions: Array<{ remove?: { index: string; alias: string }; add?: { index: string; alias: string } }> = [];
 
     try {
       const aliasExists = await esClient.indices.existsAlias({ name: alias });
       if (aliasExists) {
         const currentAliases = await esClient.indices.getAlias({ name: alias });
-        const oldIndices = Object.keys(currentAliases);
+        oldIndices.push(...Object.keys(currentAliases));
 
         for (const oldIndex of oldIndices) {
           aliasActions.push({ remove: { index: oldIndex, alias } });
-          previousIndex = oldIndex;
         }
       }
     } catch {
@@ -107,11 +116,13 @@ export async function reindex(): Promise<{
     aliasActions.push({ add: { index: newIndexName, alias } });
     await esClient.indices.updateAliases({ actions: aliasActions });
 
-    if (previousIndex && previousIndex !== newIndexName) {
-      try {
-        await esClient.indices.delete({ index: previousIndex });
-      } catch {
-        console.warn(`Failed to delete old index ${previousIndex}, manual cleanup may be needed`);
+    for (const oldIndex of oldIndices) {
+      if (oldIndex !== newIndexName) {
+        try {
+          await esClient.indices.delete({ index: oldIndex });
+        } catch {
+          console.warn(`Failed to delete old index ${oldIndex}, manual cleanup may be needed`);
+        }
       }
     }
 
@@ -119,7 +130,7 @@ export async function reindex(): Promise<{
       indexedCount: entities.length,
       indexName: newIndexName,
       alias,
-      previousIndex,
+      deletedIndices: oldIndices.filter((i) => i !== newIndexName),
     };
   } finally {
     await pool.query('SELECT pg_advisory_unlock($1)', [REINDEX_LOCK_ID]);

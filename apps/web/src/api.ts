@@ -47,3 +47,4 @@ export async function fetchFacets(): Promise<FacetsResponse> {
 
   return response.json();
 }
+
