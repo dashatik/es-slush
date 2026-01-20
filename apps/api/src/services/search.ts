@@ -50,6 +50,12 @@ function expandQuery(q: string): { query: string; expandedCountries: string[] } 
   return { query: q, expandedCountries };
 }
 
+/* buildFilters - Constructs ES filter clauses from search parameters
+Filter semantics:
+- Multiple values within same key use OR (e.g., industry=fintech OR healthtech)
+- Different keys combine with AND (e.g., industry=fintech AND country=FI)
+- Returns array of bool/term queries to be used in bool.filter context */
+
 function buildFilters(params: SearchParams): QueryDslQueryContainer[] {
   const filters: QueryDslQueryContainer[] = [];
 
@@ -89,6 +95,15 @@ function buildFilters(params: SearchParams): QueryDslQueryContainer[] {
 
   return filters;
 }
+
+/* buildQuery - Main ES query builder for discovery search
+Query strategy:
+1. Expands keywords (nordics→FI,SE,NO,DK) and normalizes stages (preseed→pre-seed)
+2. Builds multi_match across 25+ fields with tiered boosting (name^4 > tags^3 > description^1)
+3. Adds fuzzy matching (fuzziness: AUTO) for typo tolerance
+4. Uses function_score to boost entity types matching query intent (e.g., "workshop" boosts events)
+5. Combines with filters via bool query (must for scoring, filter for non-scoring constraints)
+Returns: Complete ES query ready for esClient.search() */
 
 function buildQuery(params: SearchParams): QueryDslQueryContainer {
   const filters = buildFilters(params);
@@ -278,6 +293,15 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     },
   };
 }
+
+/* search - Entry point for discovery search across all entity types
+Flow:
+1. Validates query length (min 2 chars, else returns empty to avoid noise)
+2. Builds ES query via buildQuery() with filters, boosts, and fuzzy matching
+3. Executes against ES alias (slush_entities_current)
+4. Groups results by entity_type (startups, investors, people, events)
+5. Returns grouped results with timing metadata
+Note: Returns up to 100 hits total (not per group). Relevance is tuned within each group. */
 
 export async function search(params: SearchParams): Promise<GroupedSearchResults> {
   const startTime = Date.now();

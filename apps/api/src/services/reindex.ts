@@ -11,6 +11,12 @@ Old indices are cleaned up after successful swap*/
 
 const REINDEX_LOCK_ID = 42;
 
+/* entityToSearchDocument - Transforms Postgres entity to ES document
+Derives searchable text fields from arrays:
+- industries_text: "fintech healthtech" (underscores replaced with spaces)
+- topics_text: "machine learning climate" (for full-text search)
+- speakers_text: "John Doe Jane Smith" (for event speaker search)
+This denormalization enables multi-field search without runtime joins. */
 function entityToSearchDocument(entity: Entity): SearchDocument {
   return {
     id: entity.id,
@@ -38,6 +44,20 @@ export class ReindexAlreadyRunningError extends Error {
     this.name = 'ReindexAlreadyRunningError';
   }
 }
+
+/* reindex - Rebuilds ES search index from Postgres with zero-downtime
+Execution flow:
+1. Acquire Postgres advisory lock (prevents concurrent runs, returns 409 if locked)
+2. Fetch all active_2026=true entities from Postgres (source of truth)
+3. Create new timestamped index (e.g., slush_entities_2026_v1_1234567890)
+4. Bulk index all documents (rolls back on failure: deletes new index, throws error)
+5. Atomic alias swap: remove old index from alias, add new index (search uninterrupted)
+6. Cleanup old indices (best-effort, warns on failure)
+7. Release lock in finally block (always runs, even on error)
+Failure guarantees:
+- Search alias only updates after successful bulk indexing
+- Partial failures never corrupt live search
+- Lock always released via finally block */
 
 export async function reindex(): Promise<{
   indexedCount: number;
