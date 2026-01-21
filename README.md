@@ -1,6 +1,4 @@
-<img width="945" height="469" alt="image_2026-01-21_02-19-58" src="https://github.com/user-attachments/assets/cf8916b5-6eb6-4aba-a6ef-2548454ff0ab" />gh
-<img width="828" heit="1792" alt="IMG_8784" src="https://github.com/user-attachments/assets/58f5bf93-621e-4d5a-bc7e-3cde788dd05e" />
-
+<img width="945" height="469" alt="image_2026-01-21_02-19-58" src="https://github.com/user-attachments/assets/cf8916b5-6eb6-4aba-a6ef-2548454ff0ab" />
 
 # Slush Discovery Search
 
