@@ -1,12 +1,17 @@
 import { esClient } from '../es.js';
 import { config } from '../config.js';
-import { SearchDocument, GroupedSearchResults } from '../types.js';
+import { SearchDocument, GroupedSearchResults, ChunkDocument, ChunkSearchResult, GroupedChunkResults } from '../types.js';
 import type { estypes } from '@elastic/elasticsearch';
 
 /*Search service - multi-entity discovery search with grouped results
-Supports fuzzy matching, keyword expansion (nordics/europe), stage normalization
-Results grouped by entity_type with relevance scoring within each group
-Filters use OR within same key, AND across different keys*/
+v2: Chunk-based search with field collapsing and highlighting
+
+Features:
+- Fuzzy matching, keyword expansion (nordics/europe), stage normalization
+- Results grouped by entity_type with relevance scoring within each group
+- Filters use OR within same key, AND across different keys
+- Field collapsing by entity_id for deduplication (one result per entity)
+- Highlight snippets from content field with <mark> tags */
 
 type QueryDslQueryContainer = estypes.QueryDslQueryContainer;
 type QueryDslFunctionScoreContainer = estypes.QueryDslFunctionScoreContainer;
@@ -96,13 +101,14 @@ function buildFilters(params: SearchParams): QueryDslQueryContainer[] {
   return filters;
 }
 
-/* buildQuery - Main ES query builder for discovery search
+/* buildQuery - Main ES query builder for discovery search (v2 chunk-based)
 Query strategy:
 1. Expands keywords (nordics→FI,SE,NO,DK) and normalizes stages (preseed→pre-seed)
-2. Builds multi_match across 25+ fields with tiered boosting (name^4 > tags^3 > description^1)
+2. Builds multi_match over chunk fields: name^5, title^3, content^1
 3. Adds fuzzy matching (fuzziness: AUTO) for typo tolerance
 4. Uses function_score to boost entity types matching query intent (e.g., "workshop" boosts events)
-5. Combines with filters via bool query (must for scoring, filter for non-scoring constraints)
+5. Optionally boosts header chunks (is_header_chunk:true) for better entity-level relevance
+6. Combines with filters via bool query (must for scoring, filter for non-scoring constraints)
 Returns: Complete ES query ready for esClient.search() */
 
 function buildQuery(params: SearchParams): QueryDslQueryContainer {
@@ -133,36 +139,20 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
   const normalizedTerms = queryTerms.map((t) => t.replace(/-/g, '_'));
 
   const should: QueryDslQueryContainer[] = [
+    // Primary multi_match over chunk fields with tiered boosting
     {
       multi_match: {
         query: q,
         fields: [
-          'name^4',
-          'name.en^3',
-          'name.prefix^2',
-          'industries_text^3',
-          'industries_text.en^2',
-          'industries_text.prefix^1.5',
-          'topics_text^3',
-          'topics_text.en^2',
-          'topics_text.prefix^1.5',
-          'role_title^2',
-          'role_title.en^1.5',
-          'role_title.prefix^1',
-          'company_name^2',
-          'company_name.en^1.5',
-          'company_name.prefix^1',
-          'speakers_text^2',
-          'speakers_text.en^1.5',
-          'speakers_text.prefix^1',
-          'description^1',
-          'description.en^0.8',
-          'description.prefix^0.5',
+          'name^5',
+          'title^3',
+          'content^1',
         ],
         type: 'best_fields',
         operator: 'or',
       },
     },
+    // Phrase matching on name for exact matches
     {
       match_phrase: {
         name: {
@@ -171,23 +161,19 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         },
       },
     },
+    // Fuzzy matching for typo tolerance
     {
       multi_match: {
         query: q,
         fields: [
-          'name^4',
-          'name.en^3',
-          'role_title^2',
-          'role_title.en^1.5',
-          'company_name^2',
-          'company_name.en^1.5',
-          'speakers_text^2',
-          'speakers_text.en^1.5',
+          'name^5',
+          'title^3',
         ],
         type: 'best_fields',
         fuzziness: 'AUTO:4,6',
       },
     },
+    // Keyword field matching (industries, topics, etc.)
     ...normalizedTerms.map((term) => ({
       term: {
         industries: {
@@ -252,6 +238,13 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
 
   const functions: QueryDslFunctionScoreContainer[] = [];
 
+  // Mild boost for header chunks (better entity-level summary)
+  functions.push({
+    filter: { term: { is_header_chunk: true } },
+    weight: 1.1,
+  });
+
+  // Entity type intent detection (preserved from v1)
   if (queryTerms.some((t) => ['founder', 'ceo', 'partner', 'engineer', 'investor'].includes(t))) {
     functions.push({
       filter: { term: { entity_type: 'person' } },
@@ -280,10 +273,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
     });
   }
 
-  if (functions.length === 0) {
-    return baseQuery;
-  }
-
   return {
     function_score: {
       query: baseQuery,
@@ -294,16 +283,18 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
   };
 }
 
-/* search - Entry point for discovery search across all entity types
+/* search - Entry point for discovery search across all entity types (v2 chunk-based)
 Flow:
 1. Validates query length (min 2 chars, else returns empty to avoid noise)
 2. Builds ES query via buildQuery() with filters, boosts, and fuzzy matching
-3. Executes against ES alias (slush_entities_current)
+3. Executes against ES chunks alias (slush_chunks_current) with:
+   - Field collapsing on entity_id (one result per entity)
+   - Highlighting on content field with <mark> tags
 4. Groups results by entity_type (startups, investors, people, events)
-5. Returns grouped results with timing metadata
-Note: Returns up to 100 hits total (not per group). Relevance is tuned within each group. */
+5. Returns grouped results with timing metadata and highlight snippets
+Note: Returns up to 100 unique entities. Collapse ensures no duplicate entities. */
 
-export async function search(params: SearchParams): Promise<GroupedSearchResults> {
+export async function search(params: SearchParams): Promise<GroupedChunkResults> {
   const startTime = Date.now();
   const q = params.q?.trim();
 
@@ -322,16 +313,31 @@ export async function search(params: SearchParams): Promise<GroupedSearchResults
 
   const query = buildQuery(params);
 
-  const response = await esClient.search<SearchDocument>({
-    index: config.esAlias,
+  const response = await esClient.search<ChunkDocument>({
+    index: config.esChunksAlias,
     query,
     size: 100,
     track_total_hits: true,
+    // Field collapsing: return only the best chunk per entity
+    collapse: {
+      field: 'entity_id',
+    },
+    // Highlighting on content field
+    highlight: {
+      pre_tags: ['<mark>'],
+      post_tags: ['</mark>'],
+      fields: {
+        content: {
+          fragment_size: 150,
+          number_of_fragments: 1,
+        },
+      },
+    },
   });
 
-  const hits = response.hits.hits as SearchHit<SearchDocument>[];
+  const hits = response.hits.hits as SearchHit<ChunkDocument>[];
 
-  const grouped: GroupedSearchResults = {
+  const grouped: GroupedChunkResults = {
     startups: [],
     investors: [],
     people: [],
@@ -346,22 +352,38 @@ export async function search(params: SearchParams): Promise<GroupedSearchResults
     if (!hit._source) continue;
     const doc = hit._source;
 
+    // Build result with highlight and score
+    const result: ChunkSearchResult = {
+      ...doc,
+      highlight: hit.highlight as { content?: string[] } | undefined,
+      _score: hit._score ?? undefined,
+    };
+
     switch (doc.entity_type) {
       case 'startup':
-        grouped.startups.push(doc);
+        grouped.startups.push(result);
         break;
       case 'investor':
-        grouped.investors.push(doc);
+        grouped.investors.push(result);
         break;
       case 'person':
-        grouped.people.push(doc);
+        grouped.people.push(result);
         break;
       case 'event':
-        grouped.events.push(doc);
+        grouped.events.push(result);
         break;
     }
   }
 
+  /*
+   * totalByType reflects counts of RETURNED results, not true index totals.
+   *
+   * Why: ES collapse returns deduplicated hits but doesn't provide per-type
+   * cardinality. track_total_hits gives total collapsed count, not breakdown.
+   *
+   * For true totals, would need separate aggregation query (out of scope for v2).
+   * Current behavior is correct for UI display: shows what user actually sees.
+   */
   grouped.meta.totalByType = {
     startups: grouped.startups.length,
     investors: grouped.investors.length,

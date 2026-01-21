@@ -1,10 +1,10 @@
-import { SearchDocument } from '../../types';
+import { ChunkSearchResult } from '../../types';
 import { EntityCard } from '../EntityCard/EntityCard';
 import './ResultsGroup.scss';
 
 interface ResultsGroupProps {
   title: string;
-  entities: SearchDocument[];
+  entities: ChunkSearchResult[];
   count: number;
 }
 
@@ -22,7 +22,7 @@ export function ResultsGroup({ title, entities, count }: ResultsGroupProps) {
 
       <div className="ResultsGroup__grid">
         {entities.map((entity) => (
-          <EntityCard key={entity.id} entity={entity} />
+          <EntityCard key={entity.entity_id} entity={entity} />
         ))}
       </div>
     </section>

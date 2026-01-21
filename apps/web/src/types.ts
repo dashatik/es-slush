@@ -1,3 +1,4 @@
+/* v1 SearchDocument - kept for backwards compatibility */
 export interface SearchDocument {
   id: string;
   entity_type: 'startup' | 'investor' | 'person' | 'event';
@@ -15,6 +16,43 @@ export interface SearchDocument {
   event_type: string | null;
   speakers: string[];
   speakers_text: string;
+}
+
+/* v2 ChunkSearchResult - chunk-based document with highlight support */
+export interface ChunkSearchResult {
+  entity_id: string;
+  entity_type: 'startup' | 'investor' | 'person' | 'event';
+  chunk_index: number;
+  is_header_chunk: boolean;
+  name: string;
+  title: string;
+  content: string;
+  country: string | null;
+  industries: string[];
+  topics: string[];
+  stage: string | null;
+  event_type: string | null;
+  highlight?: {
+    content?: string[];
+  };
+  _score?: number;
+}
+
+/* v2 GroupedChunkResults - grouped results with highlights */
+export interface GroupedChunkResults {
+  startups: ChunkSearchResult[];
+  investors: ChunkSearchResult[];
+  people: ChunkSearchResult[];
+  events: ChunkSearchResult[];
+  meta: {
+    tookMs: number;
+    totalByType: {
+      startups: number;
+      investors: number;
+      people: number;
+      events: number;
+    };
+  };
 }
 
 export interface GroupedSearchResults {

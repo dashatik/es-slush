@@ -3,7 +3,7 @@ import { SearchInput } from './components/SearchInput/SearchInput';
 import { FilterPanel } from './components/FilterPanel/FilterPanel';
 import { ResultsGroup } from './components/ResultsGroup/ResultsGroup';
 import { fetchSearch, fetchFacets } from './api';
-import { GroupedSearchResults, FacetsResponse, SearchFilters } from './types';
+import { GroupedChunkResults, FacetsResponse, SearchFilters } from './types';
 import './App.scss';
 
 const initialFilters: SearchFilters = {
@@ -16,7 +16,7 @@ const initialFilters: SearchFilters = {
 function App() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
-  const [results, setResults] = useState<GroupedSearchResults | null>(null);
+  const [results, setResults] = useState<GroupedChunkResults | null>(null);
   const [facets, setFacets] = useState<FacetsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

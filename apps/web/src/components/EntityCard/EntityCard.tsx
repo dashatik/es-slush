@@ -1,24 +1,28 @@
-import { SearchDocument } from '../../types';
+import { ChunkSearchResult } from '../../types';
 import './EntityCard.scss';
 
 interface EntityCardProps {
-  entity: SearchDocument;
+  entity: ChunkSearchResult;
 }
 
 function formatTag(tag: string) {
   return tag.replace(/_/g, ' ');
 }
 
+/* EntityCard - Displays a search result entity with optional highlight snippet
+v2: Shows highlight from content field when available, falls back to title
+Highlight contains HTML (<mark> tags) rendered via dangerouslySetInnerHTML */
 export function EntityCard({ entity }: EntityCardProps) {
   const metaParts: string[] = [];
-  if (entity.location) metaParts.push(entity.location);
   if (entity.country) metaParts.push(entity.country);
   if (entity.stage) metaParts.push(entity.stage);
-  if (entity.role_title) metaParts.push(entity.role_title);
-  if (entity.company_name) metaParts.push(`@ ${entity.company_name}`);
   if (entity.event_type) metaParts.push(entity.event_type);
 
   const meta = metaParts.join(' • ');
+
+  // Get highlight snippet or fall back to title
+  const highlightHtml = entity.highlight?.content?.[0];
+  const snippetText = entity.title;
 
   return (
     <article className="EntityCard">
@@ -34,8 +38,16 @@ export function EntityCard({ entity }: EntityCardProps) {
         <span className="EntityCard__type">{entity.entity_type}</span>
       </header>
 
-      {entity.description && (
-        <p className="EntityCard__description">{entity.description}</p>
+      {/* Show highlight snippet with HTML or fallback to title */}
+      {highlightHtml ? (
+        <p
+          className="EntityCard__description EntityCard__description--highlight"
+          dangerouslySetInnerHTML={{ __html: highlightHtml }}
+        />
+      ) : (
+        snippetText && (
+          <p className="EntityCard__description">{snippetText}</p>
+        )
       )}
 
       {entity.industries.length > 0 && (
@@ -45,13 +57,6 @@ export function EntityCard({ entity }: EntityCardProps) {
               {formatTag(ind)}
             </span>
           ))}
-        </div>
-      )}
-
-      {entity.speakers && entity.speakers.length > 0 && (
-        <div className="EntityCard__speakers">
-          <span className="EntityCard__speakersLabel">Speakers:</span>{' '}
-          {entity.speakers.join(', ')}
         </div>
       )}
     </article>

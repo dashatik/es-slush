@@ -6,7 +6,7 @@ The goal of this project is not feature breadth, but to show **clear judgment ar
 
 **Responsive design**: Adjusted for web and mobile screens.
 
-**GCP: Live demo:** [http://146.148.18.228](http://146.148.18.228)
+**Live demo:** [http://esslushdaria.ddns.net](http://esslushdaria.ddns.net)
 
 
 ## What this app does

@@ -1,4 +1,4 @@
-import { GroupedSearchResults, FacetsResponse, SearchFilters } from './types';
+import { GroupedChunkResults, FacetsResponse, SearchFilters } from './types';
 
 /* Production: empty string (nginx proxies to API) | Development: set VITE_API_BASE_URL=http://localhost:3001 */
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -6,7 +6,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 export async function fetchSearch(
   query: string,
   filters: SearchFilters
-): Promise<GroupedSearchResults> {
+): Promise<GroupedChunkResults> {
   const params = new URLSearchParams();
 
   if (query) {
