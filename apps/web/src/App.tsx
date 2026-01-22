@@ -21,7 +21,7 @@ function App() {
   const [facets, setFacets] = useState<FacetsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Entity detail view state
+
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +62,6 @@ function App() {
     filters.countries.length > 0 ||
     filters.stages.length > 0;
 
-  // Navigation handlers
   const handleEntityClick = (entityId: string) => {
     setSelectedEntityId(entityId);
   };
@@ -71,7 +70,6 @@ function App() {
     setSelectedEntityId(null);
   };
 
-  // Entity detail view
   if (selectedEntityId) {
     return (
       <div className="app">
@@ -91,7 +89,6 @@ function App() {
     );
   }
 
-  // Search view
   return (
     <div className="app">
       <header className="appHeader">

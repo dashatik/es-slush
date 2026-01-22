@@ -1,32 +1,26 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 
-/**
- * Entity detail API - returns entity with grouped connections
- *
- * GET /entity/:id returns:
- * - entity: core entity fields
- * - connections: grouped by relationship type (team, investors, events, related)
- *
- * Connections are resolved via entity_links table (knowledge graph edges).
- * Grouping logic is backend-owned, frontend just iterates arrays.
- */
+/* Entity detail API - returns entity with grouped connections
+GET /entity/:id returns:
+- entity: core entity fields
+- connections: grouped by relationship type (team, investors, events, related)
+Connections are resolved via entity_links table (knowledge graph edges).
+Grouping logic is backend-owned, frontend just iterates arrays. */
 
 const router = Router();
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * SQL query that returns entity + grouped connections in one call.
- *
- * Connection grouping rules (backend-owned):
- * - team: works_at, founded where person -> entity (for startups/investors)
- * - investors: invests_in where investor -> entity (for startups)
- * - portfolio: invests_in where entity -> startup (for investors)
- * - events: speaks_at, organizes, attends, volunteers_at
- * - related: fallback for 'related' type
- */
+/* SQL query that returns entity + grouped connections in one call. 
+Connection grouping rules (backend-owned):i
+- team: works_at, founded where person -> entity (for startups/investors)
+- investors: invests_in where investor -> entity (for startups)
+- portfolio: invests_in where entity -> startup (for investors)
+- events: speaks_at, organizes, attends, volunteers_at
+- related: fallback for 'related' type */
+
 const ENTITY_DETAIL_QUERY = `
 WITH base AS (
   SELECT *
@@ -175,7 +169,7 @@ SELECT jsonb_build_object(
 FROM base b;
 `;
 
-// Fallback query when entity_links table doesn't exist
+/* Fallback query when entity_links table doesn't exist */
 const ENTITY_ONLY_QUERY = `
 SELECT jsonb_build_object(
   'entity', jsonb_build_object(
@@ -208,8 +202,6 @@ WHERE id = $1;
 
 router.get('/entity/:id', async (req, res) => {
   const { id } = req.params;
-
-  // Validate UUID format
   if (!UUID_REGEX.test(id)) {
     res.status(400).json({
       error: 'Bad Request',
@@ -217,14 +209,11 @@ router.get('/entity/:id', async (req, res) => {
     });
     return;
   }
-
   try {
-    // Try full query with entity_links
     const result = await pool.query<{ payload: unknown }>(
       ENTITY_DETAIL_QUERY,
       [id]
     );
-
     if (result.rows.length === 0 || result.rows[0].payload === null) {
       res.status(404).json({
         error: 'Not Found',
@@ -232,10 +221,8 @@ router.get('/entity/:id', async (req, res) => {
       });
       return;
     }
-
     res.json(result.rows[0].payload);
   } catch (err) {
-    // If entity_links doesn't exist, fall back to entity-only query
     if (err instanceof Error && err.message.includes('entity_links')) {
       console.warn('entity_links table not found, using fallback query');
       try {
@@ -243,7 +230,6 @@ router.get('/entity/:id', async (req, res) => {
           ENTITY_ONLY_QUERY,
           [id]
         );
-
         if (fallbackResult.rows.length === 0 || fallbackResult.rows[0].payload === null) {
           res.status(404).json({
             error: 'Not Found',
@@ -251,14 +237,12 @@ router.get('/entity/:id', async (req, res) => {
           });
           return;
         }
-
         res.json(fallbackResult.rows[0].payload);
         return;
       } catch (fallbackErr) {
         console.error('Fallback query failed:', fallbackErr);
       }
     }
-
     console.error('GET /entity/:id failed:', err);
     res.status(500).json({
       error: 'Internal Server Error',

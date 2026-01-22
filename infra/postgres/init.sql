@@ -61,17 +61,23 @@ CREATE INDEX IF NOT EXISTS entities_updated_at_idx ON entities (updated_at);
 -- ============================================================
 
 -- Link types (extendable without schema migration)
-CREATE TYPE link_type AS ENUM (
-  'works_at',      -- person -> startup/investor
-  'founded',       -- person -> startup
-  'invests_in',    -- investor -> startup
-  'partner_at',    -- person -> investor
-  'speaks_at',     -- person/startup -> event
-  'organizes',     -- person/startup/investor -> event
-  'attends',       -- any -> event
-  'volunteers_at', -- person -> event
-  'related'        -- generic fallback
-);
+-- Idempotent: only create if doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'link_type') THEN
+    CREATE TYPE link_type AS ENUM (
+      'works_at',      -- person -> startup/investor
+      'founded',       -- person -> startup
+      'invests_in',    -- investor -> startup
+      'partner_at',    -- person -> investor
+      'speaks_at',     -- person/startup -> event
+      'organizes',     -- person/startup/investor -> event
+      'attends',       -- any -> event
+      'volunteers_at', -- person -> event
+      'related'        -- generic fallback
+    );
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS entity_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -104,6 +110,8 @@ EXECUTE FUNCTION set_updated_at();
 -- "All links FROM this entity" (e.g., person's jobs, investor's portfolio)
 CREATE INDEX IF NOT EXISTS entity_links_from_idx ON entity_links (from_entity_id, type);
 -- "All links TO this entity" (e.g., startup's team, event's speakers)
+-- This is the primary query pattern for connection blocks
 CREATE INDEX IF NOT EXISTS entity_links_to_idx ON entity_links (to_entity_id, type);
--- "All links involving this entity" (bidirectional lookups)
-CREATE INDEX IF NOT EXISTS entity_links_type_to_idx ON entity_links (type, to_entity_id);
+
+-- Drop redundant index if it exists (to_idx already covers this pattern)
+DROP INDEX IF EXISTS entity_links_type_to_idx;

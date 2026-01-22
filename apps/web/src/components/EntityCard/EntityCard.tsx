@@ -14,6 +14,7 @@ function formatTag(tag: string) {
 v2: Shows highlight from content field when available, falls back to title
 Highlight contains HTML (<mark> tags) rendered via dangerouslySetInnerHTML
 Click handler navigates to entity detail page */
+
 export function EntityCard({ entity, onClick }: EntityCardProps) {
   const metaParts: string[] = [];
   if (entity.country) metaParts.push(entity.country);
@@ -22,7 +23,6 @@ export function EntityCard({ entity, onClick }: EntityCardProps) {
 
   const meta = metaParts.join(' • ');
 
-  // Get highlight snippet or fall back to title
   const highlightHtml = entity.highlight?.content?.[0];
   const snippetText = entity.title;
 
@@ -57,7 +57,6 @@ export function EntityCard({ entity, onClick }: EntityCardProps) {
         <span className="EntityCard__type">{entity.entity_type}</span>
       </header>
 
-      {/* Show highlight snippet with HTML or fallback to title */}
       {highlightHtml ? (
         <p
           className="EntityCard__description EntityCard__description--highlight"

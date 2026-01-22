@@ -1,6 +1,7 @@
 import { GroupedChunkResults, FacetsResponse, SearchFilters, EntityDetailResponse } from './types';
 
-/* Production: empty string (nginx proxies to API) | Development: set VITE_API_BASE_URL=http://localhost:3001 */
+/* Production: nginx proxies to API && Development: http://localhost:3001 */
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export async function fetchSearch(

@@ -6,7 +6,7 @@ const router = Router();
 
 router.post('/admin/reindex', async (req, res) => {
   try {
-    // Block in production unless ADMIN_TOKEN is provided and correct
+    /* In production ADMIN_TOKEN is required */
     const isProd = config.nodeEnv === 'production';
 
     if (isProd) {

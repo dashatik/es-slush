@@ -38,7 +38,6 @@ export interface ChunkSearchResult {
   _score?: number;
 }
 
-/* v2 GroupedChunkResults - grouped results with highlights */
 export interface GroupedChunkResults {
   startups: ChunkSearchResult[];
   investors: ChunkSearchResult[];
@@ -84,7 +83,6 @@ export interface SearchFilters {
   stages: string[];
 }
 
-/* Entity detail types for /entity/:id API */
 export interface EntityDetail {
   id: string;
   name: string;
@@ -107,7 +105,7 @@ export interface ConnectionItem {
   type: string;
   role: string | null;
   context: string | null;
-  entity_type?: string; // For related/speakers which can be any type
+  entity_type?: string; // related/speakers which can be any type
 }
 
 export interface EntityConnections {

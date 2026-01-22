@@ -6,7 +6,6 @@ const router = Router();
 
 router.get('/facets', async (_req, res) => {
   try {
-    // Fetch facets from Postgres (active_2026 = true only)
     const [industriesResult, countriesResult, stagesResult] = await Promise.all([
       pool.query<{ industry: string }>(
         `SELECT DISTINCT UNNEST(industries) as industry

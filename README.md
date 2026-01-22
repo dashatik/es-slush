@@ -1,243 +1,283 @@
-# Slush Discovery Search
+# Slush Discovery Search — V2
 
-A small, production-style **discovery search system** spanning startups, investors, people, and events.
+A production-style discovery search application built to demonstrate **search relevance, data modeling, and operational judgment**.
 
-The goal of this project is not feature breadth, but to show **clear judgment around data ownership, search relevance, and operational safety**. PostgreSQL is treated as the system of record; Elasticsearch is a read-optimized projection built explicitly for discovery.
+The system is intentionally scoped and structured around a clear architectural boundary:
 
-**Responsive design**: Adjusted for web and mobile screens.
+- **PostgreSQL is the System of Record (SoR)**
+- **Elasticsearch is a read-optimized projection for discovery search**
 
-**Live demo:** [http://esslushdaria.ddns.net](http://esslushdaria.ddns.net)
+Version **V2** extends the baseline search system with:
+- Chunk-based full-text indexing
+- Deterministic reindexing
+- Highlighted search results
+- Entity detail pages backed by a relational knowledge graph
 
+---
 
-## What this app does
+## What the application does
 
-The application provides a single search experience across four entity types:
+### Discovery Search
+Users can search across four entity types:
 
-* **Startups** — companies with industry, stage, and geography
-* **Investors** — funds with focus areas and regions
-* **People** — founders, partners, and professionals
-* **Events** — talks, workshops, and sessions
+- Startups  
+- Investors  
+- People  
+- Events  
 
-Users can type short, informal queries such as:
-
-* `pre-seed AI investors US`
-* `climate supply chain startups`
-* `CEO fintech`
-* `machine learnin climate` (typo intentional)
+Search supports:
+- Full-text BM25 relevance
+- Typo tolerance
+- Prefix matching
+- Highlighted snippets from long-form descriptions
 
 Results are **grouped by entity type**, not mixed into a single ranked list.
-Relevance is tuned *within each group*, which reflects how discovery tools are typically used: you decide *what kind of thing* you’re looking for first, then scan the best matches.
 
-Very short queries (< 2 characters) intentionally return no results to avoid noisy, misleading output.
+---
 
+### Entity Detail Pages (V2 extension)
 
-## Search relevance
+Each search result is clickable.
 
-The search system is tuned for **high recall on short, messy discovery queries**.
+Clicking a result opens an **Entity Detail page** that displays:
+- Full entity data (from PostgreSQL)
+- Structured relationship blocks (team, investors, portfolio, events, speakers)
 
-The primary goal is simple and measurable:
+Navigation is SPA-style (no page reloads).
 
-> Strong matches should appear in the **top 3** of the most relevant entity group.
+---
 
-Implemented relevance features include:
+## Architecture overview
 
-* Multi-field matching (name, description, tags, roles)
-* Fuzzy matching for typo tolerance
-* Prefix matching via edge n-grams
-* Lightweight keyword normalization (e.g. “preseed” → “pre-seed”)
-* Entity-type–aware field boosting
+### Data ownership
+- **PostgreSQL**
+  - Owns all entities and relationships
+  - Serves entity detail pages
+- **Elasticsearch**
+  - Stores chunked documents for search
+  - Can be fully rebuilt at any time
 
-All relevance expectations and example queries are documented in
-**`docs/relevance-notes.md`**, which acts as a small, auditable test suite.
+There are **no joins, graph traversal, or parent-child relations inside Elasticsearch**.
 
+---
 
-## Architecture at a glance
+## Search architecture (Elasticsearch)
 
-```
-PostgreSQL (system of record)
-        ↓
-   POST /admin/reindex
-        ↓
-Elasticsearch (versioned index + alias)
-        ↓
-     GET /search
-        ↓
-   React discovery UI
-```
+### Chunking strategy
+Long-form descriptions are split into overlapping chunks to avoid BM25 dilution.
 
-### Core principles
+Each chunk document contains:
+- Deterministic `_id = "${entity_id}_${chunk_index}"`
+- `entity_id` (keyword, used for collapse)
+- `entity_type`
+- `chunk_index`
+- `name` / `title` (duplicated identically across chunks)
+- `content` (chunk text, with term vectors enabled)
 
-* **Postgres is authoritative**
-  All writes and canonical state live in PostgreSQL.
+### Index behavior
+- Search queries use `multi_match` with field weighting
+- Results are collapsed by `entity_id`
+- Highlighting is applied to `content` chunks
 
-* **Elasticsearch is derived**
-  ES is treated as a disposable, rebuildable projection optimized for search.
+This ensures:
+- One search result per entity
+- Snippets come from the most relevant text fragment
 
-* **Reindexing is explicit**
-  Index rebuilds are triggered manually to keep behavior predictable and easy to reason about.
+---
 
-* **Zero-downtime rebuilds**
-  Versioned indices and atomic alias swaps ensure search never sees partial data.
+## Database model (PostgreSQL)
 
-* **Eventual consistency by design**
-  Search reflects the state of Postgres at the time of the most recent successful reindex.
+### `entities`
+A single table storing all domain objects, distinguished by `entity_type`:
 
-Only entities marked `active_2026 = true` are indexed, enforcing current-year validity at the projection level.
+- `startup`
+- `investor`
+- `person`
+- `event`
 
+This table is the **authoritative source** for all entity data.
 
-## Tech stack
+---
 
-| Layer    | Technology                    |
-| -------- | ----------------------------- |
-| Frontend | React 18, TypeScript, Vite    |
-| Backend  | Node.js, Express, TypeScript  |
-| Database | PostgreSQL 16                 |
-| Search   | Elasticsearch 8.x             |
-| Infra    | Docker Compose, Nginx, GCP VM |
+### `entity_links` (knowledge graph edges)
 
+A universal relationship table connecting entities.
+
+Each row represents a **directed edge**:
+- `from_entity_id → to_entity_id`
+- `type` (`link_type` enum)
+- Optional context fields:
+  - `role_title`
+  - `context`
+  - `meta` (JSONB)
+
+Supported relationship types:
+- `works_at`
+- `founded`
+- `invests_in`
+- `partner_at`
+- `speaks_at`
+- `organizes`
+- `attends`
+- `volunteers_at`
+- `related`
+
+Constraints and guarantees:
+- Foreign keys with `ON DELETE CASCADE`
+- Unique constraint on `(from_entity_id, to_entity_id, type)`
+- Indexed for directional lookups
+
+---
+
+## API
+
+### `GET /search`
+Returns grouped search results from Elasticsearch.
+
+---
+
+### `GET /entity/:id`
+
+Returns a **single JSON payload** containing:
+- `entity`: core fields from PostgreSQL
+- `connections`: relationship blocks resolved from `entity_links`
+
+UUID format is validated before querying.
+
+#### Response shape
+```json
+{
+  "entity": {
+    "id": "uuid",
+    "name": "CarbonFlow",
+    "entity_type": "startup",
+    "description": "...",
+    "country": "FI",
+    "location": "Helsinki",
+    "industries": [],
+    "topics": [],
+    "stage": "seed",
+    "role_title": null,
+    "company_name": null,
+    "event_type": null,
+    "speakers": []
+  },
+  "connections": {
+    "team": [],
+    "investors": [],
+    "portfolio": [],
+    "events": [],
+    "speakers": [],
+    "related": []
+  }
+}
+````
+
+---
+
+### Connection grouping rules (backend-owned)
+
+Grouping logic is implemented entirely in SQL and returned ready for rendering.
+
+* **team**
+
+  * `works_at`, `founded`, `partner_at`
+  * Direction: `person → startup` or `person → investor`
+
+* **investors** *(startup pages)*
+
+  * `invests_in`
+  * Direction: `investor → startup`
+
+* **portfolio** *(investor pages)*
+
+  * `invests_in`
+  * Direction: `investor → startup`
+
+* **events**
+
+  * `speaks_at`, `organizes`, `attends`, `volunteers_at`
+  * Always scoped to links involving the requested entity
+
+* **speakers** *(event pages)*
+
+  * `speaks_at`, `organizes`
+  * Direction: `entity → event`
+
+* **related**
+
+  * Generic fallback links
+
+If the `entity_links` table is not present, the API safely falls back to returning the entity with empty connection arrays.
+
+---
+
+## Frontend behavior
+
+* Search results are clickable cards
+* Cards support keyboard navigation (Enter / Space)
+* Clicking a card opens the entity detail view
+* Highlight snippets are rendered using trusted `<mark>` tags from Elasticsearch
+
+---
 
 ## Running locally
 
-**Prerequisites:** Docker + Docker Compose
+### Requirements
+
+* Node.js
+* Docker + Docker Compose
+
+### Start infrastructure
 
 ```bash
-# Start all services
-docker compose up --build
+docker compose up -d
 
-# Build the search projection (required once)
 curl -X POST http://localhost:3001/admin/reindex
-
-# Open the app
-# UI:  http://localhost:5173
-# API: http://localhost:3001
 ```
 
-To reset all data:
+This initializes:
 
-```bash
-docker compose down -v
-```
-
-
-## API overview
-
-### `GET /search`
-
-Returns results grouped by entity type.
-
-**Query parameters**
-
-| Name       | Type     | Notes                         |
-| ---------- | -------- | ----------------------------- |
-| `q`        | string   | Free-text query (min 2 chars) |
-| `type`     | string   | Entity type filter            |
-| `industry` | string[] | OR within the same key        |
-| `country`  | string[] | OR within the same key        |
-| `stage`    | string[] | OR within the same key        |
-
-Different filter keys combine with **AND** semantics.
+* PostgreSQL schema (`infra/postgres/init.sql`)
+* Seed data (`infra/postgres/seed.sql`)
+* Elasticsearch
 
 
-### `POST /admin/reindex`
+## Reindexing Elasticsearch
 
-Rebuilds the Elasticsearch projection from PostgreSQL.
+PostgreSQL remains the System of Record.
 
-**What it does:**
+Elasticsearch is rebuilt explicitly via the admin reindex endpoint.
+Entity pages do **not** depend on Elasticsearch.
 
-1. Acquires a Postgres advisory lock (prevents concurrent runs)
-2. Fetches all `active_2026 = true` entities
-3. Creates a new versioned ES index
-4. Bulk indexes all documents (idempotent by Postgres ID)
-5. Atomically swaps the search alias
-6. Cleans up old indices
-7. Releases the lock
+---
 
-Search traffic continues uninterrupted throughout the process.
+## Scope decisions (intentional)
 
-Reindexing is intentionally manual to keep behavior explicit and failure modes obvious.
+The following are explicitly **out of scope for V2**:
 
+* Vector search
+* Semantic embeddings
+* Synonym expansion beyond basic normalization
+* Authorization or user accounts
+* Graph traversal inside Elasticsearch
 
-## Trade-offs and scope decisions
+The focus of V2 is:
 
-This project intentionally avoids:
+* Correct relevance behavior
+* Deterministic ingestion
+* Clear data ownership
+* Maintainable evolution path
 
-| Feature                | Reason                                                  |
-| ---------------------- | ------------------------------------------------------- |
-| Incremental indexing   | Rebuild-based projection keeps logic simple and correct |
-| Query-time joins       | All search data is denormalized                         |
-| Query-dependent facets | Global facets avoid aggregation complexity              |
-| Numeric extraction     | Structured filters are the source of truth              |
-| Free-text negation     | Type and facet filters handle exclusion                 |
-| Authentication         | Not required for demo scope                             |
+---
 
+## Status
 
-## Operational notes
+**V2 is complete and stable**:
 
-### Resource constraints
+* Chunked search with highlighting
+* Deterministic reindexing
+* Entity detail pages
+* Relational knowledge graph in Postgres
 
-| Service       | Allocation         | Notes                                      |
-|---------------|--------------------|--------------------------------------------|
-| Elasticsearch | 512MB heap         | Set via `ES_JAVA_OPTS` in docker-compose   |
-| PostgreSQL    | Docker default     | No custom limits needed at demo scale      |
-| API (Node.js) | ~128MB typical     | Stateless; scales horizontally if needed   |
-
-**ES memory tuning:** The 512MB heap (`-Xms512m -Xmx512m`) is sized for local development with ~100 entities. For production or larger datasets:
-
-```yaml
-# docker-compose.yml
-ES_JAVA_OPTS=-Xms1g -Xmx1g  # 1GB heap for ~50K entities
-```
-
-Rule of thumb: ES heap should be ≤50% of available RAM, never exceed 32GB.
-
-### Reindex failure handling
-
-The reindex process is designed to fail safely. Search remains available throughout.
-
-| Failure Point | What Happens | Recovery |
-|---------------|--------------|----------|
-| Concurrent reindex | Returns `409 Conflict` (Postgres advisory lock) | Wait for current run to finish, retry |
-| Bulk indexing errors | New index is deleted, error thrown with details | Fix source data in Postgres, retry |
-| Alias swap fails | New index exists but isn't serving traffic | Manual cleanup: delete orphaned index |
-| Old index cleanup fails | Warning logged, search unaffected | Manual cleanup later (optional) |
-
-**Key guarantee:** The search alias only swaps *after* successful indexing. Partial failures never corrupt the live search.
-
-**Lock behavior:** Postgres advisory lock (ID 42) prevents concurrent reindex runs. The lock is always released in a `finally` block, even on failure.
-
-### Checking reindex status
-
-```bash
-# See which index the alias points to
-curl http://localhost:9200/_alias/slush_entities_current
-
-# Check index health
-curl http://localhost:9200/_cat/indices?v
-
-# View cluster health
-curl http://localhost:9200/_cluster/health
-```
-
-
-## Repository structure
-
-```
-apps/
-  api/ # Express + TypeScript API
-  web/ # React + Vite frontend
-infra/
-  nginx/ # Reverse proxy config
-  postgres/ # Schema + seed data
-docs/
-  relevance-notes.md
-docker-compose.yml
-docker-compose.prod.yml
-```
-
-
-## Notes for reviewers
-
-* All search expectations are explicitly defined in `docs/relevance-notes.md`
-* Reindexing is rebuild-based and idempotent by design
-* Trade-offs are documented intentionally rather than implied
-* The code favors readability and correctness over cleverness
+The system is ready for further iteration without architectural rewrites.

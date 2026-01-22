@@ -6,6 +6,7 @@ import './EntityDetail.scss';
 interface EntityDetailProps {
   entityId: string;
   onBack: () => void;
+  onEntityClick: (entityId: string) => void;
 }
 
 function formatTag(tag: string) {
@@ -46,7 +47,7 @@ function ConnectionBlock({ title, items, onEntityClick }: ConnectionBlockProps) 
   );
 }
 
-export function EntityDetail({ entityId, onBack, onEntityClick }: EntityDetailProps & { onEntityClick: (id: string) => void }) {
+export function EntityDetail({ entityId, onBack, onEntityClick }: EntityDetailProps) {
   const [data, setData] = useState<EntityDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +83,6 @@ export function EntityDetail({ entityId, onBack, onEntityClick }: EntityDetailPr
 
   const { entity, connections } = data;
 
-  // Build meta info
   const metaParts: string[] = [];
   if (entity.location) metaParts.push(entity.location);
   if (entity.country) metaParts.push(entity.country);
@@ -93,7 +93,6 @@ export function EntityDetail({ entityId, onBack, onEntityClick }: EntityDetailPr
 
   const meta = metaParts.join(' • ');
 
-  // Check which connection blocks to show based on entity type
   const showTeam = connections.team.length > 0;
   const showInvestors = connections.investors.length > 0 && entity.entity_type === 'startup';
   const showPortfolio = connections.portfolio.length > 0 && entity.entity_type === 'investor';

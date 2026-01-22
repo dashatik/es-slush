@@ -139,7 +139,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
   const normalizedTerms = queryTerms.map((t) => t.replace(/-/g, '_'));
 
   const should: QueryDslQueryContainer[] = [
-    // Primary multi_match over chunk fields with tiered boosting
     {
       multi_match: {
         query: q,
@@ -152,7 +151,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         operator: 'or',
       },
     },
-    // Phrase matching on name for exact matches
     {
       match_phrase: {
         name: {
@@ -161,7 +159,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         },
       },
     },
-    // Fuzzy matching for typo tolerance
     {
       multi_match: {
         query: q,
@@ -173,7 +170,6 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
         fuzziness: 'AUTO:4,6',
       },
     },
-    // Keyword field matching (industries, topics, etc.)
     ...normalizedTerms.map((term) => ({
       term: {
         industries: {
@@ -238,13 +234,11 @@ function buildQuery(params: SearchParams): QueryDslQueryContainer {
 
   const functions: QueryDslFunctionScoreContainer[] = [];
 
-  // Mild boost for header chunks (better entity-level summary)
   functions.push({
     filter: { term: { is_header_chunk: true } },
     weight: 1.1,
   });
 
-  // Entity type intent detection (preserved from v1)
   if (queryTerms.some((t) => ['founder', 'ceo', 'partner', 'engineer', 'investor'].includes(t))) {
     functions.push({
       filter: { term: { entity_type: 'person' } },
@@ -318,11 +312,9 @@ export async function search(params: SearchParams): Promise<GroupedChunkResults>
     query,
     size: 100,
     track_total_hits: true,
-    // Field collapsing: return only the best chunk per entity
     collapse: {
       field: 'entity_id',
     },
-    // Highlighting on content field
     highlight: {
       pre_tags: ['<mark>'],
       post_tags: ['</mark>'],
@@ -352,7 +344,6 @@ export async function search(params: SearchParams): Promise<GroupedChunkResults>
     if (!hit._source) continue;
     const doc = hit._source;
 
-    // Build result with highlight and score
     const result: ChunkSearchResult = {
       ...doc,
       highlight: hit.highlight as { content?: string[] } | undefined,
@@ -375,15 +366,12 @@ export async function search(params: SearchParams): Promise<GroupedChunkResults>
     }
   }
 
-  /*
-   * totalByType reflects counts of RETURNED results, not true index totals.
-   *
-   * Why: ES collapse returns deduplicated hits but doesn't provide per-type
-   * cardinality. track_total_hits gives total collapsed count, not breakdown.
-   *
-   * For true totals, would need separate aggregation query (out of scope for v2).
-   * Current behavior is correct for UI display: shows what user actually sees.
-   */
+/* totalByType reflects counts of RETURNED results, not true index totals.
+Why: ES collapse returns deduplicated hits but doesn't provide per-type
+cardinality. track_total_hits gives total collapsed count, not breakdown.
+For true totals, would need separate aggregation query (out of scope for v2).
+Current behavior is correct for UI display: shows what user actually sees. */
+
   grouped.meta.totalByType = {
     startups: grouped.startups.length,
     investors: grouped.investors.length,

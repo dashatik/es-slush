@@ -36,6 +36,7 @@ export const indexSettings: IndicesIndexSettings = {
 /* v2 Chunk-based index settings
 Uses only built-in analyzers (no plugins like ICU)
 Optimized for BM25 relevance on chunked text with highlighting */
+
 export const chunkIndexSettings: IndicesIndexSettings = {
   number_of_shards: 1,
   number_of_replicas: 0,
@@ -60,6 +61,7 @@ export const chunkIndexSettings: IndicesIndexSettings = {
 - content: text with term_vector for fast highlighting
 - name/title: text with custom analyzer for fuzzy matching
 - Filter fields preserved for faceted search */
+
 export const chunkMapping: MappingTypeMapping = {
   dynamic: 'strict',
   properties: {
@@ -80,7 +82,6 @@ export const chunkMapping: MappingTypeMapping = {
       analyzer: 'slush_content_analyzer',
       term_vector: 'with_positions_offsets',
     },
-    // Filter fields for faceted search (preserved from v1)
     country: { type: 'keyword' },
     industries: { type: 'keyword' },
     topics: { type: 'keyword' },

@@ -24,6 +24,7 @@ Derives searchable text fields from arrays:
 - topics_text: "machine learning climate" (for full-text search)
 - speakers_text: "John Doe Jane Smith" (for event speaker search)
 This denormalization enables multi-field search without runtime joins. */
+
 function entityToSearchDocument(entity: Entity): SearchDocument {
   return {
     id: entity.id,
@@ -51,20 +52,19 @@ Each chunk contains:
 - Duplicated fields: entity_id, entity_type, name, title (for collapse/display)
 - Unique fields: chunk_index, is_header_chunk, content
 - Filter fields: country, industries, topics, stage, event_type (for faceted search) */
+
 function entityToChunkDocuments(entity: Entity): ChunkDocument[] {
   const title = buildTitle(entity);
   const textToChunk = entity.description || '';
 
-  // Get chunks from description
   const textChunks = splitToChunks(textToChunk);
 
-  /*
-   * Header-only entities (no description):
-   * - Still participate in search via a single header chunk
-   * - content = title ensures name/title matching works
-   * - is_header_chunk: true receives mild boost from function_score
-   * - Guarantees every entity has at least one searchable document
-   */
+/* Header-only entities (no description):
+- Still participate in search via a single header chunk
+- content = title ensures name/title matching works
+- is_header_chunk: true receives mild boost from function_score
+- Guarantees every entity has at least one searchable document */
+
   if (textChunks.length === 0) {
     return [{
       entity_id: entity.id,
@@ -82,7 +82,6 @@ function entityToChunkDocuments(entity: Entity): ChunkDocument[] {
     }];
   }
 
-  // Create chunk documents
   return textChunks.map((chunk) => ({
     entity_id: entity.id,
     entity_type: entity.entity_type,
@@ -159,13 +158,12 @@ export async function reindex(): Promise<{
     let totalChunks = 0;
 
     if (entities.length > 0) {
-      // Generate all chunk documents with deterministic IDs
       const allChunkDocs: Array<{ id: string; doc: ChunkDocument }> = [];
 
       for (const entity of entities) {
         const chunks = entityToChunkDocuments(entity);
         for (const chunk of chunks) {
-          // Deterministic ID: entity_id_chunk_index (idempotent reindex)
+          // Deterministic ID: idempotent reindex
           const docId = `${chunk.entity_id}_${chunk.chunk_index}`;
           allChunkDocs.push({ id: docId, doc: chunk });
         }
@@ -173,8 +171,7 @@ export async function reindex(): Promise<{
 
       totalChunks = allChunkDocs.length;
       console.log(`Generated ${totalChunks} chunks from ${entities.length} entities`);
-
-      // Bulk index in batches to avoid memory pressure
+      // !Bulk index in batches to avoid memory pressure!
       for (let i = 0; i < allChunkDocs.length; i += BULK_BATCH_SIZE) {
         const batch = allChunkDocs.slice(i, i + BULK_BATCH_SIZE);
         const operations = batch.flatMap(({ id, doc }) => [
@@ -195,15 +192,14 @@ export async function reindex(): Promise<{
 
           console.error('Bulk indexing failures (first 5):', JSON.stringify(failedItems, null, 2));
 
-          // Rollback: delete incomplete index
           await esClient.indices.delete({ index: newIndexName });
           throw new Error(`Bulk indexing failed: ${failedItems.length > 0 ? failedItems[0].error : 'unknown error'}`);
         }
 
-        console.log(`Indexed batch ${Math.floor(i / BULK_BATCH_SIZE) + 1}/${Math.ceil(allChunkDocs.length / BULK_BATCH_SIZE)} (${Math.min(i + BULK_BATCH_SIZE, allChunkDocs.length)}/${allChunkDocs.length} chunks)`);
+        console.log(`Indexed batch ${Math.floor(i / BULK_BATCH_SIZE) + 1}/${Math.ceil(allChunkDocs.length / BULK_BATCH_SIZE)} 
+        (${Math.min(i + BULK_BATCH_SIZE, allChunkDocs.length)}/${allChunkDocs.length} chunks)`);
       }
 
-      // Final refresh to make all docs searchable
       await esClient.indices.refresh({ index: newIndexName });
     }
 
@@ -222,7 +218,7 @@ export async function reindex(): Promise<{
         }
       }
     } catch {
-      // Alias doesn't exist yet - that's fine for first run
+      // Alias doesn't exist yet
     }
 
     aliasActions.push({ add: { index: newIndexName, alias } });
@@ -230,7 +226,6 @@ export async function reindex(): Promise<{
 
     console.log(`Alias ${alias} now points to ${newIndexName}`);
 
-    // Cleanup old indices (best-effort)
     for (const oldIndex of oldIndices) {
       if (oldIndex !== newIndexName) {
         try {

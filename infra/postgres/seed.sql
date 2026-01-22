@@ -940,10 +940,18 @@ INSERT INTO entities (
 -- Creates relationships between entities for the knowledge graph
 -- ============================================================
 
--- Helper function for cleaner inserts (lookup entity by name)
-CREATE OR REPLACE FUNCTION get_entity_id(entity_name text) RETURNS uuid AS $$
-  SELECT id FROM entities WHERE name = entity_name LIMIT 1;
-$$ LANGUAGE sql;
+-- Strict helper function: raises exception if entity not found (prevents silent NULLs from typos)
+CREATE OR REPLACE FUNCTION get_entity_id_strict(entity_name text) RETURNS uuid AS $$
+DECLARE
+  eid uuid;
+BEGIN
+  SELECT id INTO eid FROM entities WHERE name = entity_name LIMIT 1;
+  IF eid IS NULL THEN
+    RAISE EXCEPTION 'Entity not found in seed data: %', entity_name;
+  END IF;
+  RETURN eid;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Clean slate
 TRUNCATE TABLE entity_links;
@@ -951,130 +959,130 @@ TRUNCATE TABLE entity_links;
 -- TEAM RELATIONSHIPS (person works_at/founded startup)
 INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
 -- Sofia Lindström founded CarbonFlow
-((SELECT id FROM entities WHERE name = 'Sofia Lindström'),
- (SELECT id FROM entities WHERE name = 'CarbonFlow'),
+(get_entity_id_strict('Sofia Lindström'),
+ get_entity_id_strict('CarbonFlow'),
  'founded', 'Founder', 'Co-founded in 2024'),
 -- Anna Korhonen is CEO at LedgerNest
-((SELECT id FROM entities WHERE name = 'Anna Korhonen'),
- (SELECT id FROM entities WHERE name = 'LedgerNest'),
+(get_entity_id_strict('Anna Korhonen'),
+ get_entity_id_strict('LedgerNest'),
  'works_at', 'CEO', NULL),
 -- Elina Saarinen founded SisuKYC
-((SELECT id FROM entities WHERE name = 'Elina Saarinen'),
- (SELECT id FROM entities WHERE name = 'SisuKYC'),
+(get_entity_id_strict('Elina Saarinen'),
+ get_entity_id_strict('SisuKYC'),
  'founded', 'Founder', NULL),
 -- Markus Weber works at ContextScale
-((SELECT id FROM entities WHERE name = 'Markus Weber'),
- (SELECT id FROM entities WHERE name = 'ContextScale'),
+(get_entity_id_strict('Markus Weber'),
+ get_entity_id_strict('ContextScale'),
  'works_at', 'ML Engineer', NULL),
 -- Marta Nowak is CEO at Reglance
-((SELECT id FROM entities WHERE name = 'Marta Nowak'),
- (SELECT id FROM entities WHERE name = 'Reglance'),
+(get_entity_id_strict('Marta Nowak'),
+ get_entity_id_strict('Reglance'),
  'works_at', 'CEO', NULL),
 -- Oskar Jensen works at FrostFleet
-((SELECT id FROM entities WHERE name = 'Oskar Jensen'),
- (SELECT id FROM entities WHERE name = 'FrostFleet'),
+(get_entity_id_strict('Oskar Jensen'),
+ get_entity_id_strict('FrostFleet'),
  'works_at', 'Head of Logistics', NULL),
 -- Hiro Tanaka is CTO at VectorDock
-((SELECT id FROM entities WHERE name = 'Hiro Tanaka'),
- (SELECT id FROM entities WHERE name = 'VectorDock'),
+(get_entity_id_strict('Hiro Tanaka'),
+ get_entity_id_strict('VectorDock'),
  'works_at', 'CTO', NULL),
 -- Nina Berg is COO at HelioWarehouse
-((SELECT id FROM entities WHERE name = 'Nina Berg'),
- (SELECT id FROM entities WHERE name = 'HelioWarehouse'),
+(get_entity_id_strict('Nina Berg'),
+ get_entity_id_strict('HelioWarehouse'),
  'works_at', 'COO', NULL),
 -- Ethan Brooks founded AuditTrail AI
-((SELECT id FROM entities WHERE name = 'Ethan Brooks'),
- (SELECT id FROM entities WHERE name = 'AuditTrail AI'),
+(get_entity_id_strict('Ethan Brooks'),
+ get_entity_id_strict('AuditTrail AI'),
  'founded', 'Founder', NULL),
 -- Jonas Eriksen is CEO at VoltRoute
-((SELECT id FROM entities WHERE name = 'Jonas Eriksen'),
- (SELECT id FROM entities WHERE name = 'VoltRoute'),
+(get_entity_id_strict('Jonas Eriksen'),
+ get_entity_id_strict('VoltRoute'),
  'works_at', 'CEO', NULL),
 -- Claire Dubois founded ArcticTrace
-((SELECT id FROM entities WHERE name = 'Claire Dubois'),
- (SELECT id FROM entities WHERE name = 'ArcticTrace'),
+(get_entity_id_strict('Claire Dubois'),
+ get_entity_id_strict('ArcticTrace'),
  'founded', 'Founder', NULL),
 -- Ravi Patel works at PipeForge
-((SELECT id FROM entities WHERE name = 'Ravi Patel'),
- (SELECT id FROM entities WHERE name = 'PipeForge'),
+(get_entity_id_strict('Ravi Patel'),
+ get_entity_id_strict('PipeForge'),
  'works_at', 'Data Engineer', NULL);
 
 -- PARTNER RELATIONSHIPS (person partner_at investor)
 INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
 -- James Miller is Partner at NorthBridge Ventures
-((SELECT id FROM entities WHERE name = 'James Miller'),
- (SELECT id FROM entities WHERE name = 'NorthBridge Ventures'),
+(get_entity_id_strict('James Miller'),
+ get_entity_id_strict('NorthBridge Ventures'),
  'partner_at', 'Partner', NULL),
 -- Lars Nygaard is Partner at Climate Supply Fund Europe
-((SELECT id FROM entities WHERE name = 'Lars Nygaard'),
- (SELECT id FROM entities WHERE name = 'Climate Supply Fund Europe'),
+(get_entity_id_strict('Lars Nygaard'),
+ get_entity_id_strict('Climate Supply Fund Europe'),
  'partner_at', 'Partner', NULL),
 -- Priya Shah is Partner at CloudRail Ventures
-((SELECT id FROM entities WHERE name = 'Priya Shah'),
- (SELECT id FROM entities WHERE name = 'CloudRail Ventures'),
+(get_entity_id_strict('Priya Shah'),
+ get_entity_id_strict('CloudRail Ventures'),
  'partner_at', 'Partner', NULL),
 -- Isabel García is Partner at Fintech Forward VC
-((SELECT id FROM entities WHERE name = 'Isabel García'),
- (SELECT id FROM entities WHERE name = 'Fintech Forward VC'),
+(get_entity_id_strict('Isabel García'),
+ get_entity_id_strict('Fintech Forward VC'),
  'partner_at', 'Partner', NULL),
 -- Samuel Okoye is Partner at GreenInfra Ventures
-((SELECT id FROM entities WHERE name = 'Samuel Okoye'),
- (SELECT id FROM entities WHERE name = 'GreenInfra Ventures'),
+(get_entity_id_strict('Samuel Okoye'),
+ get_entity_id_strict('GreenInfra Ventures'),
  'partner_at', 'Partner', NULL),
 -- Greta Holm works at Founders First Capital
-((SELECT id FROM entities WHERE name = 'Greta Holm'),
- (SELECT id FROM entities WHERE name = 'Founders First Capital'),
+(get_entity_id_strict('Greta Holm'),
+ get_entity_id_strict('Founders First Capital'),
  'works_at', 'Investor Relations', NULL);
 
 -- INVESTMENT RELATIONSHIPS (investor invests_in startup)
 INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
 -- Aurora Capital invested in CarbonFlow
-((SELECT id FROM entities WHERE name = 'Aurora Capital'),
- (SELECT id FROM entities WHERE name = 'CarbonFlow'),
+(get_entity_id_strict('Aurora Capital'),
+ get_entity_id_strict('CarbonFlow'),
  'invests_in', 'Lead Investor', 'Seed Round'),
 -- Polar VC invested in FrostFleet
-((SELECT id FROM entities WHERE name = 'Polar VC'),
- (SELECT id FROM entities WHERE name = 'FrostFleet'),
+(get_entity_id_strict('Polar VC'),
+ get_entity_id_strict('FrostFleet'),
  'invests_in', 'Lead Investor', 'Seed Round'),
 -- NorthBridge Ventures invested in ContextScale
-((SELECT id FROM entities WHERE name = 'NorthBridge Ventures'),
- (SELECT id FROM entities WHERE name = 'ContextScale'),
+(get_entity_id_strict('NorthBridge Ventures'),
+ get_entity_id_strict('ContextScale'),
  'invests_in', 'Lead Investor', 'Pre-Seed'),
 -- Fintech Forward VC invested in LedgerNest
-((SELECT id FROM entities WHERE name = 'Fintech Forward VC'),
- (SELECT id FROM entities WHERE name = 'LedgerNest'),
+(get_entity_id_strict('Fintech Forward VC'),
+ get_entity_id_strict('LedgerNest'),
  'invests_in', 'Participant', 'Seed Round'),
 -- CloudRail Ventures invested in VectorDock
-((SELECT id FROM entities WHERE name = 'CloudRail Ventures'),
- (SELECT id FROM entities WHERE name = 'VectorDock'),
+(get_entity_id_strict('CloudRail Ventures'),
+ get_entity_id_strict('VectorDock'),
  'invests_in', 'Lead Investor', 'Pre-Seed'),
 -- Climate Supply Fund Europe invested in ArcticTrace
-((SELECT id FROM entities WHERE name = 'Climate Supply Fund Europe'),
- (SELECT id FROM entities WHERE name = 'ArcticTrace'),
+(get_entity_id_strict('Climate Supply Fund Europe'),
+ get_entity_id_strict('ArcticTrace'),
  'invests_in', 'Lead Investor', 'Series A');
 
 -- SPEAKER RELATIONSHIPS (person/startup speaks_at event)
 INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
 -- Sofia Lindström speaks at Climate Supply Chain Roundtable
-((SELECT id FROM entities WHERE name = 'Sofia Lindström'),
- (SELECT id FROM entities WHERE name = 'Climate Supply Chain Roundtable'),
+(get_entity_id_strict('Sofia Lindström'),
+ get_entity_id_strict('Climate Supply Chain Roundtable'),
  'speaks_at', 'Panelist', NULL),
 -- Anna Korhonen speaks at Fintech in the Nordics panel
-((SELECT id FROM entities WHERE name = 'Anna Korhonen'),
- (SELECT id FROM entities WHERE name = 'Fintech in the Nordics: Payments & Compliance'),
+(get_entity_id_strict('Anna Korhonen'),
+ get_entity_id_strict('Fintech in the Nordics: Payments & Compliance'),
  'speaks_at', 'Panelist', NULL),
 -- Hiro Tanaka speaks at Retrieval Systems panel
-((SELECT id FROM entities WHERE name = 'Hiro Tanaka'),
- (SELECT id FROM entities WHERE name = 'Retrieval Systems for LLM Apps'),
+(get_entity_id_strict('Hiro Tanaka'),
+ get_entity_id_strict('Retrieval Systems for LLM Apps'),
  'speaks_at', 'Panelist', NULL),
 -- Greta Holm speaks at Fundraising 101 Workshop
-((SELECT id FROM entities WHERE name = 'Greta Holm'),
- (SELECT id FROM entities WHERE name = 'Fundraising 101 Workshop'),
+(get_entity_id_strict('Greta Holm'),
+ get_entity_id_strict('Fundraising 101 Workshop'),
  'speaks_at', 'Host', NULL),
 -- CarbonFlow pitches at Climate Supply Chain Roundtable
-((SELECT id FROM entities WHERE name = 'CarbonFlow'),
- (SELECT id FROM entities WHERE name = 'Climate Supply Chain Roundtable'),
+(get_entity_id_strict('CarbonFlow'),
+ get_entity_id_strict('Climate Supply Chain Roundtable'),
  'speaks_at', 'Pitching Startup', NULL);
 
--- Drop helper function (optional, keeps schema clean)
-DROP FUNCTION IF EXISTS get_entity_id(text);
+-- Drop helper function (keeps schema clean)
+DROP FUNCTION IF EXISTS get_entity_id_strict(text);

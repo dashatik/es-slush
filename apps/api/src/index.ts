@@ -7,8 +7,8 @@ import searchRouter from './routes/search.js';
 import facetsRouter from './routes/facets.js';
 import entityRouter from './routes/entity.js';
 
-/*Slush Discovery Search API
-Routes: health, admin (reindex), search, facets, entity*/
+/* Slush Discovery Search API
+Routes: health, admin (reindex), search, facets, entity */
 
 const app = express();
 

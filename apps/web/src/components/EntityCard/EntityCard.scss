@@ -82,7 +82,6 @@
   line-clamp: 3;
   overflow: hidden;
 
-  // Highlight styling for search matches
   mark {
     background: rgba(117, 254, 114, 0.25);
     color: inherit;
@@ -92,7 +91,6 @@
 }
 
 .EntityCard__description--highlight {
-  // Highlighted snippets may start mid-sentence, show ellipsis
   &::before {
     content: '...';
     color: var(--muted);
