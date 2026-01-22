@@ -1,6 +1,6 @@
 <img width="945" height="469" alt="image_2026-01-21_02-19-58" src="https://github.com/user-attachments/assets/cf8916b5-6eb6-4aba-a6ef-2548454ff0ab" />
 
-# Slush Discovery Search
+# Slush Discovery Search (V1); (V2 in SLUSH-1 branch)
 
 A small, production-style **discovery search system** spanning startups, investors, people, and events.
 
