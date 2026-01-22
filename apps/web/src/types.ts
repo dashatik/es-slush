@@ -83,3 +83,43 @@ export interface SearchFilters {
   countries: string[];
   stages: string[];
 }
+
+/* Entity detail types for /entity/:id API */
+export interface EntityDetail {
+  id: string;
+  name: string;
+  entity_type: 'startup' | 'investor' | 'person' | 'event';
+  description: string | null;
+  country: string | null;
+  location: string | null;
+  industries: string[];
+  topics: string[];
+  stage: string | null;
+  role_title: string | null;
+  company_name: string | null;
+  event_type: string | null;
+  speakers: string[];
+}
+
+export interface ConnectionItem {
+  id: string;
+  name: string;
+  type: string;
+  role: string | null;
+  context: string | null;
+  entity_type?: string; // For related/speakers which can be any type
+}
+
+export interface EntityConnections {
+  team: ConnectionItem[];
+  investors: ConnectionItem[];
+  portfolio: ConnectionItem[];
+  events: ConnectionItem[];
+  speakers: ConnectionItem[];
+  related: ConnectionItem[];
+}
+
+export interface EntityDetailResponse {
+  entity: EntityDetail;
+  connections: EntityConnections;
+}

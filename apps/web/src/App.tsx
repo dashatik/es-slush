@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { SearchInput } from './components/SearchInput/SearchInput';
 import { FilterPanel } from './components/FilterPanel/FilterPanel';
 import { ResultsGroup } from './components/ResultsGroup/ResultsGroup';
+import { EntityDetail } from './components/EntityDetail/EntityDetail';
 import { fetchSearch, fetchFacets } from './api';
 import { GroupedChunkResults, FacetsResponse, SearchFilters } from './types';
 import './App.scss';
@@ -20,6 +21,8 @@ function App() {
   const [facets, setFacets] = useState<FacetsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Entity detail view state
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFacets()
@@ -59,6 +62,36 @@ function App() {
     filters.countries.length > 0 ||
     filters.stages.length > 0;
 
+  // Navigation handlers
+  const handleEntityClick = (entityId: string) => {
+    setSelectedEntityId(entityId);
+  };
+
+  const handleBackToSearch = () => {
+    setSelectedEntityId(null);
+  };
+
+  // Entity detail view
+  if (selectedEntityId) {
+    return (
+      <div className="app">
+        <header className="appHeader">
+          <h1 className="appTitle">Slush Discovery Search</h1>
+          <p className="appSubtitle">Find startups, investors, people, and events</p>
+        </header>
+
+        <main className="appMain appMain--detail">
+          <EntityDetail
+            entityId={selectedEntityId}
+            onBack={handleBackToSearch}
+            onEntityClick={handleEntityClick}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // Search view
   return (
     <div className="app">
       <header className="appHeader">
@@ -95,10 +128,30 @@ function App() {
                 </div>
               ) : (
                 <div className="results">
-                  <ResultsGroup title="Startups" entities={results.startups} count={results.meta.totalByType.startups} />
-                  <ResultsGroup title="Investors" entities={results.investors} count={results.meta.totalByType.investors} />
-                  <ResultsGroup title="People" entities={results.people} count={results.meta.totalByType.people} />
-                  <ResultsGroup title="Events" entities={results.events} count={results.meta.totalByType.events} />
+                  <ResultsGroup
+                    title="Startups"
+                    entities={results.startups}
+                    count={results.meta.totalByType.startups}
+                    onEntityClick={handleEntityClick}
+                  />
+                  <ResultsGroup
+                    title="Investors"
+                    entities={results.investors}
+                    count={results.meta.totalByType.investors}
+                    onEntityClick={handleEntityClick}
+                  />
+                  <ResultsGroup
+                    title="People"
+                    entities={results.people}
+                    count={results.meta.totalByType.people}
+                    onEntityClick={handleEntityClick}
+                  />
+                  <ResultsGroup
+                    title="Events"
+                    entities={results.events}
+                    count={results.meta.totalByType.events}
+                    onEntityClick={handleEntityClick}
+                  />
                 </div>
               )}
             </>
@@ -107,7 +160,7 @@ function App() {
       </main>
     </div>
   );
-};
+}
 
 
 export default App;

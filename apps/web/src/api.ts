@@ -1,4 +1,4 @@
-import { GroupedChunkResults, FacetsResponse, SearchFilters } from './types';
+import { GroupedChunkResults, FacetsResponse, SearchFilters, EntityDetailResponse } from './types';
 
 /* Production: empty string (nginx proxies to API) | Development: set VITE_API_BASE_URL=http://localhost:3001 */
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -43,6 +43,19 @@ export async function fetchFacets(): Promise<FacetsResponse> {
 
   if (!response.ok) {
     throw new Error(`Facets fetch failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function fetchEntity(id: string): Promise<EntityDetailResponse> {
+  const response = await fetch(`${API_BASE}/entity/${id}`);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error('Entity not found');
+    }
+    throw new Error(`Entity fetch failed: ${response.statusText}`);
   }
 
   return response.json();

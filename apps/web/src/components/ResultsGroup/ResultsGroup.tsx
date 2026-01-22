@@ -6,9 +6,10 @@ interface ResultsGroupProps {
   title: string;
   entities: ChunkSearchResult[];
   count: number;
+  onEntityClick?: (entityId: string) => void;
 }
 
-export function ResultsGroup({ title, entities, count }: ResultsGroupProps) {
+export function ResultsGroup({ title, entities, count, onEntityClick }: ResultsGroupProps) {
   if (count === 0) return null;
 
   return (
@@ -22,7 +23,11 @@ export function ResultsGroup({ title, entities, count }: ResultsGroupProps) {
 
       <div className="ResultsGroup__grid">
         {entities.map((entity) => (
-          <EntityCard key={entity.entity_id} entity={entity} />
+          <EntityCard
+            key={entity.entity_id}
+            entity={entity}
+            onClick={onEntityClick}
+          />
         ))}
       </div>
     </section>

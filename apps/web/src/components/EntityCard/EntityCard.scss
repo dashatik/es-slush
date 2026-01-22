@@ -3,10 +3,28 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, transform 0.1s;
 
   &:hover {
     border-color: rgba(117, 254, 114, 0.25);
+  }
+
+  &--clickable {
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba(117, 254, 114, 0.4);
+      transform: translateY(-1px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(117, 254, 114, 0.5);
+      outline-offset: 2px;
+    }
   }
 }
 

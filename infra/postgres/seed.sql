@@ -4,8 +4,8 @@
 -- Optional but recommended: UUID generation in dev
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Clean slate (dev only)
-TRUNCATE TABLE entities;
+-- Clean slate (dev only) - CASCADE required because entity_links references entities
+TRUNCATE TABLE entities CASCADE;
 
 -- ============================================================
 -- STARTUPS (20)
@@ -934,3 +934,147 @@ INSERT INTO entities (
   'panel', ARRAY['Marta Nowak','Claire Dubois'],
   TRUE, now(), now()
 );
+
+-- ============================================================
+-- ENTITY_LINKS (30 connections)
+-- Creates relationships between entities for the knowledge graph
+-- ============================================================
+
+-- Helper function for cleaner inserts (lookup entity by name)
+CREATE OR REPLACE FUNCTION get_entity_id(entity_name text) RETURNS uuid AS $$
+  SELECT id FROM entities WHERE name = entity_name LIMIT 1;
+$$ LANGUAGE sql;
+
+-- Clean slate
+TRUNCATE TABLE entity_links;
+
+-- TEAM RELATIONSHIPS (person works_at/founded startup)
+INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
+-- Sofia Lindström founded CarbonFlow
+((SELECT id FROM entities WHERE name = 'Sofia Lindström'),
+ (SELECT id FROM entities WHERE name = 'CarbonFlow'),
+ 'founded', 'Founder', 'Co-founded in 2024'),
+-- Anna Korhonen is CEO at LedgerNest
+((SELECT id FROM entities WHERE name = 'Anna Korhonen'),
+ (SELECT id FROM entities WHERE name = 'LedgerNest'),
+ 'works_at', 'CEO', NULL),
+-- Elina Saarinen founded SisuKYC
+((SELECT id FROM entities WHERE name = 'Elina Saarinen'),
+ (SELECT id FROM entities WHERE name = 'SisuKYC'),
+ 'founded', 'Founder', NULL),
+-- Markus Weber works at ContextScale
+((SELECT id FROM entities WHERE name = 'Markus Weber'),
+ (SELECT id FROM entities WHERE name = 'ContextScale'),
+ 'works_at', 'ML Engineer', NULL),
+-- Marta Nowak is CEO at Reglance
+((SELECT id FROM entities WHERE name = 'Marta Nowak'),
+ (SELECT id FROM entities WHERE name = 'Reglance'),
+ 'works_at', 'CEO', NULL),
+-- Oskar Jensen works at FrostFleet
+((SELECT id FROM entities WHERE name = 'Oskar Jensen'),
+ (SELECT id FROM entities WHERE name = 'FrostFleet'),
+ 'works_at', 'Head of Logistics', NULL),
+-- Hiro Tanaka is CTO at VectorDock
+((SELECT id FROM entities WHERE name = 'Hiro Tanaka'),
+ (SELECT id FROM entities WHERE name = 'VectorDock'),
+ 'works_at', 'CTO', NULL),
+-- Nina Berg is COO at HelioWarehouse
+((SELECT id FROM entities WHERE name = 'Nina Berg'),
+ (SELECT id FROM entities WHERE name = 'HelioWarehouse'),
+ 'works_at', 'COO', NULL),
+-- Ethan Brooks founded AuditTrail AI
+((SELECT id FROM entities WHERE name = 'Ethan Brooks'),
+ (SELECT id FROM entities WHERE name = 'AuditTrail AI'),
+ 'founded', 'Founder', NULL),
+-- Jonas Eriksen is CEO at VoltRoute
+((SELECT id FROM entities WHERE name = 'Jonas Eriksen'),
+ (SELECT id FROM entities WHERE name = 'VoltRoute'),
+ 'works_at', 'CEO', NULL),
+-- Claire Dubois founded ArcticTrace
+((SELECT id FROM entities WHERE name = 'Claire Dubois'),
+ (SELECT id FROM entities WHERE name = 'ArcticTrace'),
+ 'founded', 'Founder', NULL),
+-- Ravi Patel works at PipeForge
+((SELECT id FROM entities WHERE name = 'Ravi Patel'),
+ (SELECT id FROM entities WHERE name = 'PipeForge'),
+ 'works_at', 'Data Engineer', NULL);
+
+-- PARTNER RELATIONSHIPS (person partner_at investor)
+INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
+-- James Miller is Partner at NorthBridge Ventures
+((SELECT id FROM entities WHERE name = 'James Miller'),
+ (SELECT id FROM entities WHERE name = 'NorthBridge Ventures'),
+ 'partner_at', 'Partner', NULL),
+-- Lars Nygaard is Partner at Climate Supply Fund Europe
+((SELECT id FROM entities WHERE name = 'Lars Nygaard'),
+ (SELECT id FROM entities WHERE name = 'Climate Supply Fund Europe'),
+ 'partner_at', 'Partner', NULL),
+-- Priya Shah is Partner at CloudRail Ventures
+((SELECT id FROM entities WHERE name = 'Priya Shah'),
+ (SELECT id FROM entities WHERE name = 'CloudRail Ventures'),
+ 'partner_at', 'Partner', NULL),
+-- Isabel García is Partner at Fintech Forward VC
+((SELECT id FROM entities WHERE name = 'Isabel García'),
+ (SELECT id FROM entities WHERE name = 'Fintech Forward VC'),
+ 'partner_at', 'Partner', NULL),
+-- Samuel Okoye is Partner at GreenInfra Ventures
+((SELECT id FROM entities WHERE name = 'Samuel Okoye'),
+ (SELECT id FROM entities WHERE name = 'GreenInfra Ventures'),
+ 'partner_at', 'Partner', NULL),
+-- Greta Holm works at Founders First Capital
+((SELECT id FROM entities WHERE name = 'Greta Holm'),
+ (SELECT id FROM entities WHERE name = 'Founders First Capital'),
+ 'works_at', 'Investor Relations', NULL);
+
+-- INVESTMENT RELATIONSHIPS (investor invests_in startup)
+INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
+-- Aurora Capital invested in CarbonFlow
+((SELECT id FROM entities WHERE name = 'Aurora Capital'),
+ (SELECT id FROM entities WHERE name = 'CarbonFlow'),
+ 'invests_in', 'Lead Investor', 'Seed Round'),
+-- Polar VC invested in FrostFleet
+((SELECT id FROM entities WHERE name = 'Polar VC'),
+ (SELECT id FROM entities WHERE name = 'FrostFleet'),
+ 'invests_in', 'Lead Investor', 'Seed Round'),
+-- NorthBridge Ventures invested in ContextScale
+((SELECT id FROM entities WHERE name = 'NorthBridge Ventures'),
+ (SELECT id FROM entities WHERE name = 'ContextScale'),
+ 'invests_in', 'Lead Investor', 'Pre-Seed'),
+-- Fintech Forward VC invested in LedgerNest
+((SELECT id FROM entities WHERE name = 'Fintech Forward VC'),
+ (SELECT id FROM entities WHERE name = 'LedgerNest'),
+ 'invests_in', 'Participant', 'Seed Round'),
+-- CloudRail Ventures invested in VectorDock
+((SELECT id FROM entities WHERE name = 'CloudRail Ventures'),
+ (SELECT id FROM entities WHERE name = 'VectorDock'),
+ 'invests_in', 'Lead Investor', 'Pre-Seed'),
+-- Climate Supply Fund Europe invested in ArcticTrace
+((SELECT id FROM entities WHERE name = 'Climate Supply Fund Europe'),
+ (SELECT id FROM entities WHERE name = 'ArcticTrace'),
+ 'invests_in', 'Lead Investor', 'Series A');
+
+-- SPEAKER RELATIONSHIPS (person/startup speaks_at event)
+INSERT INTO entity_links (from_entity_id, to_entity_id, type, role_title, context) VALUES
+-- Sofia Lindström speaks at Climate Supply Chain Roundtable
+((SELECT id FROM entities WHERE name = 'Sofia Lindström'),
+ (SELECT id FROM entities WHERE name = 'Climate Supply Chain Roundtable'),
+ 'speaks_at', 'Panelist', NULL),
+-- Anna Korhonen speaks at Fintech in the Nordics panel
+((SELECT id FROM entities WHERE name = 'Anna Korhonen'),
+ (SELECT id FROM entities WHERE name = 'Fintech in the Nordics: Payments & Compliance'),
+ 'speaks_at', 'Panelist', NULL),
+-- Hiro Tanaka speaks at Retrieval Systems panel
+((SELECT id FROM entities WHERE name = 'Hiro Tanaka'),
+ (SELECT id FROM entities WHERE name = 'Retrieval Systems for LLM Apps'),
+ 'speaks_at', 'Panelist', NULL),
+-- Greta Holm speaks at Fundraising 101 Workshop
+((SELECT id FROM entities WHERE name = 'Greta Holm'),
+ (SELECT id FROM entities WHERE name = 'Fundraising 101 Workshop'),
+ 'speaks_at', 'Host', NULL),
+-- CarbonFlow pitches at Climate Supply Chain Roundtable
+((SELECT id FROM entities WHERE name = 'CarbonFlow'),
+ (SELECT id FROM entities WHERE name = 'Climate Supply Chain Roundtable'),
+ 'speaks_at', 'Pitching Startup', NULL);
+
+-- Drop helper function (optional, keeps schema clean)
+DROP FUNCTION IF EXISTS get_entity_id(text);
